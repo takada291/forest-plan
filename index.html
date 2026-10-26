@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>森林管理</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Marked.js (Markdown変換用ライブラリ) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            height: 100dvh; 
+            background: #f4f7f6; 
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+        }
+        #controls {
+            padding: 10px 15px;
+            background: #fff;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            z-index: 1000;
+            border-bottom: 2px solid #27ae60;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .app-title {
+            font-weight: bold;
+            font-size: 16px;
+            color: #27ae60;
+            margin-right: 10px;
+            white-space: nowrap;
+        }
+        input[type="text"], input[type="password"], textarea {
+            padding: 6px 10px;
+            font-size: 13px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-family: inherit;
+        }
+        button {
+            padding: 6px 15px;
+            font-size: 13px;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+            white-space: nowrap;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #219653; }
+        button:disabled { background-color: #95a5a6; cursor: not-allowed; }
+        
+        #btnAiSearch { background-color: #6f42c1; }
+        #btnAiSearch:hover { background-color: #59339d; }
+
+        /* メインレイアウト（左右分割） */
+        #main-container {
+            display: flex;
+            flex-grow: 1;
+            overflow: hidden;
+            flex-direction: row;
+        }
+        #map-container {
+            flex: 6; /* 60% */
+            position: relative;
+            border-right: 1px solid #ccc;
+        }
+        #map { width: 100%; height: 100%; }
+
+        /* サイドバー（チャット・プロンプト領域） */
+        #sidebar {
+            flex: 4; /* 40% */
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            padding: 15px;
+            box-sizing: border-box;
+            min-width: 350px;
+            overflow-y: auto;
+        }
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+            border-left: 3px solid #27ae60;
+            padding-left: 8px;
+        }
+        
+        /* ★v0.1修正: テンプレートが入りやすいように高さを拡張 */
+        #prompt-input {
+            width: 100%;
+            height: 250px;
+            resize: vertical;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            font-size: 12px;
+            line-height: 1.4;
+            background-color: #fafafa;
+        }
+        #btnSubmitPrompt {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            background-color: #e67e22;
+        }
+        #btnSubmitPrompt:hover { background-color: #d35400; }
+        
+        #result-area {
+            flex-grow: 1;
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            overflow-y: auto;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        #result-area h3 { margin-top: 0; color: #2c3e50; font-size: 15px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
+        #result-area ul { padding-left: 20px; margin-top: 5px; }
+        #result-area p { margin-top: 5px; }
+
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+            z-index: 1001;
+        }
+        .crosshair::before, .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(231, 76, 60, 0.8);
+            z-index: 1001;
+        }
+        .crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
+        .crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+        
+        @media (max-width: 768px) {
+            #main-container { flex-direction: column; }
+            #map-container { flex: 1; min-height: 300px; border-right: none; border-bottom: 1px solid #ccc; }
+            #sidebar { flex: 1; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="controls">
+    <span class="app-title">森林管理 v0.1</span>
+    <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 130px;">
+    <div style="display: flex; gap: 4px;">
+        <!-- ★v0.1修正: プレースホルダーを民有林込みの具体例に変更 -->
+        <input type="text" id="aiSearchInput" placeholder="場所をAI検索 (例: 福井県大野市民有林16林班)" onkeypress="handleAiSearchEnter(event)" style="width: 260px;">
+        <button id="btnAiSearch" onclick="searchLocationWithGemini()">🤖 検索</button>
+    </div>
+    <button onclick="map.locate({setView: true, maxZoom: 15})">🎯 現在地</button>
+</div>
+
+<div id="main-container">
+    <div id="map-container">
+        <div id="map"></div>
+        <div class="crosshair"></div>
+    </div>
+    
+    <div id="sidebar">
+        <div class="section-title">現場の状況・指示（プロンプト編集）</div>
+        <!-- ★v0.1修正: テンプレートを初期値として設定 -->
+        <textarea id="prompt-input">プロンプト例）詳細に記述するほど正確な提案ができます
+〇地域の現状
+林種樹種；主に人工林スギ６０～８０年生、天然林ザツ８０～年生
+立木材積；スギで概ね５００～７００m３/ha
+丸太材質；クマ剝ぎなど獣害がありA材１割、B材２割、C材７割程
+丸太価格；m３当りA材11,000円、B材9,000円、C材6,000円程
+路網密度；林道や作業道で100～150m/ha程、国道も近くアクセスは良い
+各種制限；水源かんよう保安林、皆伐は可、植林2,500本/ha
+そのほか；冬期の降雪が数mと多く雪起しが必須
+
+〇提案の内容
+要約；主伐から植林、保育まで全体としての収支分析
+主伐；方法（路網を利用、架線を利用か）
+植林；植栽樹種は何がいいか
+保育；雪起し、下刈り、除伐、枝打ち、獣害で留意するポイント
+間伐；定性・列状どちらがいいか
+路網；地形を考慮した線形など</textarea>
+        <button id="btnSubmitPrompt" onclick="generateForestryPlan()">📄 AIへ指示出し (提案生成)</button>
+        
+        <div id="result-area">
+            <div style="color: #666; text-align: center; margin-top: 20px;">
+                👆 現場の状況に合わせて上のテキストを編集し、「指示出し」ボタンを押してください。<br>Geminiが分析と提案を行います。
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const savedKey = localStorage.getItem('gemini_api_key_forest');
+        if(savedKey) {
+            document.getElementById('geminiApiKey').value = savedKey;
+        }
+    });
+
+    let startLat = 36.065;
+    let startLon = 136.221;
+    let startZoom = 13; 
+
+    const map = L.map('map', { zoomControl: false }).setView([startLat, startLon], startZoom);
+    L.control.zoom({ position: 'topleft' }).addTo(map);
+    L.control.scale({ imperial: false, metric: true, position: 'bottomleft' }).addTo(map);
+
+    const opt = { attribution: '地理院タイル', crossOrigin: "anonymous", maxZoom: 18 };
+    const pale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', opt);
+    const std = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', opt);
+    const photo = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', opt);
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+    });
+
+    pale.addTo(map);
+
+    const baseMaps = {
+        "淡色地図（水域が見やすい）": pale,
+        "標準地図（地理院）": std,
+        "最新空中写真": photo,
+        "OpenStreetMap（世界地図）": osm
+    };
+    L.control.layers(baseMaps, null, { collapsed: true }).addTo(map);
+
+    async function getBestModel(apiKey) {
+        const modelRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        if (!modelRes.ok) {
+            throw new Error("APIキーが無効、またはモデル一覧が取得できません。");
+        }
+        const modelData = await modelRes.json();
+        const models = modelData.models || [];
+        const capableModels = models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"));
+        
+        let bestModel = capableModels.find(m => m.name === "models/gemini-2.5-flash");
+        if (!bestModel) bestModel = capableModels.find(m => m.name === "models/gemini-1.5-flash");
+        if (!bestModel) bestModel = capableModels.find(m => m.name === "models/gemini-1.5-pro");
+        
+        if (bestModel) {
+            return bestModel.name.replace("models/", "");
+        }
+        return "gemini-1.5-flash"; 
+    }
+
+    async function searchLocationWithGemini() {
+        const apiKey = document.getElementById('geminiApiKey').value.trim();
+        const query = document.getElementById('aiSearchInput').value.trim();
+        
+        if (!apiKey) { alert("Gemini APIキーを入力してください。"); return; }
+        if (!query) { alert("検索したい場所を入力してください。"); return; }
+
+        localStorage.setItem('gemini_api_key_forest', apiKey);
+        const btn = document.getElementById('btnAiSearch');
+        btn.innerText = "⏳ 検索中...";
+        btn.disabled = true;
+
+        try {
+            const targetModel = await getBestModel(apiKey);
+            
+            const prompt = `あなたは優秀な地理情報アシスタントです。以下のテキストからユーザーが見たい対象の場所を推測し、その中心座標（緯度・経度）をJSON形式で返してください。
+            テキスト: "${query}"
+            出力形式: {"lat": 緯度, "lon": 経度}
+            ※Markdown記法や余計な説明は一切含めず、純粋なJSON文字列のみを出力してください。`;
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { response_mime_type: "application/json" } 
+                })
+            });
+            
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            
+            const text = data.candidates[0].content.parts[0].text;
+            const coords = JSON.parse(text);
+            
+            if (coords.lat && coords.lon) {
+                map.setView([coords.lat, coords.lon], 14);
+            } else {
+                throw new Error("座標データが正しく取得できませんでした");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("AIによる場所の特定に失敗しました。\n詳細: " + error.message);
+        } finally {
+            btn.innerText = "🤖 検索";
+            btn.disabled = false;
+        }
+    }
+
+    function handleAiSearchEnter(event) {
+        if (event.key === 'Enter') searchLocationWithGemini();
+    }
+
+    async function generateForestryPlan() {
+        const apiKey = document.getElementById('geminiApiKey').value.trim();
+        const userPrompt = document.getElementById('prompt-input').value.trim();
+        const resultArea = document.getElementById('result-area');
+        const btn = document.getElementById('btnSubmitPrompt');
+        
+        if (!apiKey) { alert("Gemini APIキーを入力してください。"); return; }
+        if (!userPrompt) { alert("現場の状況（プロンプト）を入力してください。"); return; }
+
+        localStorage.setItem('gemini_api_key_forest', apiKey);
+        
+        btn.innerText = "⏳ AIが提案を作成中...";
+        btn.disabled = true;
+        resultArea.innerHTML = `<div style="text-align:center; padding: 20px;">AIが森林データを分析し、提案を作成しています...<br>少々お待ちください。</div>`;
+
+        try {
+            const targetModel = await getBestModel(apiKey);
+            const center = map.getCenter();
+            
+            // ★v0.1修正: システムプロンプトにJ-クレジットなどの環境価値・収益モデルの検討を追加
+            const systemPrompt = `あなたは日本国内の林業・森林管理に精通した優秀なコンサルタントです。
+ユーザーから提供された現場の状況（樹種、林齢、蓄積、路網状況、希望する提案内容など）を元に、特定の林班に対する最適な「森林管理の処方箋」を作成してください。
+
+【ユーザーからの提供情報・要望】
+${userPrompt}
+
+【対象エリアの座標（参考）】
+緯度: ${center.lat.toFixed(4)}, 経度: ${center.lng.toFixed(4)}
+
+以下の項目について、専門的かつ実践的な視点から提案を行ってください。出力はMarkdown形式で、見やすく構造化してください。
+1. **現状の要約とポテンシャル評価**: 提示された条件に基づく森林の総合評価。
+2. **推奨される施業方針**: ユーザーの要望（主伐、植林、保育、間伐、路網など）に応じた具体的な手法の提示と、その技術的根拠。
+3. **経済性と収支見込**: 補助金活用、木材収入、作業コストに加え、**J-クレジット（森林吸収系）などの環境価値を活用した収益化の可能性**も考慮した多角的な見通し。
+4. **課題とリスク管理**: 施業における注意事項（地形、気象条件、獣害リスクなどへの対策）。
+
+回答の末尾には、「※本提案の内容は、システム上の各種レイヤー（微地形図や森林資源メッシュ等）による視覚的な地形・林分確認と併せてご活用ください。」というテキストを必ず添えてください。`;
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: systemPrompt }] }]
+                })
+            });
+            
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            
+            const responseText = data.candidates[0].content.parts[0].text;
+            resultArea.innerHTML = marked.parse(responseText);
+            
+        } catch (error) {
+            console.error(error);
+            resultArea.innerHTML = `<div style="color: #e74c3c; font-weight: bold;">提案の作成に失敗しました。<br>詳細: ${error.message}</div>`;
+        } finally {
+            btn.innerText = "📄 AIへ指示出し (提案生成)";
+            btn.disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>
