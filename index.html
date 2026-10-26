@@ -66,7 +66,6 @@
             font-size: 13px; line-height: 1.5; color: #333;
         }
         
-        /* Markdownテーブルのスタイル調整（ダッシュボード風） */
         #result-area table { border-collapse: collapse; width: 100%; margin-bottom: 15px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         #result-area th, #result-area td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
         #result-area th { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; }
@@ -99,7 +98,7 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">森林管理 v0.4</span>
+    <span class="app-title">森林管理 v0.5</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 120px;">
     <div style="display: flex; gap: 4px;">
         <input type="text" id="aiSearchInput" placeholder="場所検索 (例: 福井県福井市大手)" onkeypress="handleAiSearchEnter(event)" style="width: 260px;">
@@ -153,7 +152,7 @@
         }
     });
 
-    let startLat = 36.06289; // 福井県庁
+    let startLat = 36.06289; 
     let startLon = 136.22184;
     let startZoom = 14; 
 
@@ -168,19 +167,20 @@
     const pale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', opt);
     const photo = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', opt);
     
-    // ★v0.3追加: 林野庁ベクトルタイル（全国森林計画図＆資源メッシュ）の表示
-    // 実際に地図上に表示されます
-    const rinyaRinpan = L.tileLayer('https://rinya-opendata.rad.naro.go.jp/maff-rinya/xyz/rinpan_08/{z}/{x}/{y}.png', {
-        opacity: 0.6,
-        maxZoom: 18,
-        attribution: '林野庁 森林計画図'
+    // ★v0.5修正: 本物のGeoJSON（ベクトルデータ）を扱うレイヤーを作成
+    const geoRinpan = L.geoJSON(null, { style: { color: "#27ae60", weight: 2, fillOpacity: 0.2 } });
+    const geoMesh = L.geoJSON(null, { style: { color: "#e67e22", weight: 1, fillOpacity: 0.2 } });
+
+    // ※ ここを実際の高田さんのGitHub上のファイルパスに変更してください
+    const rinpanUrl = './data/rinpan.geojson'; 
+    const meshUrl = './data/mesh.geojson';
+
+    // GeoJSONのフェッチ（ファイルが無ければダミー図形を描画）
+    fetch(rinpanUrl).then(r => r.json()).then(data => geoRinpan.addData(data)).catch(() => {
+        const dLat = startLat, dLng = startLon;
+        geoRinpan.addData({"type": "Feature", "properties": {"name": "ダミー林班"}, "geometry": { "type": "Polygon", "coordinates": [[[dLng-0.008, dLat-0.008], [dLng+0.008, dLat-0.008], [dLng+0.008, dLat+0.008], [dLng-0.008, dLat+0.008], [dLng-0.008, dLat-0.008]]] }});
     });
-    
-    const rinyaMesh = L.tileLayer('https://rinya-opendata.rad.naro.go.jp/maff-rinya/xyz/shigen_mesh_08/{z}/{x}/{y}.png', {
-        opacity: 0.6,
-        maxZoom: 18,
-        attribution: '林野庁 森林資源メッシュ'
-    });
+    fetch(meshUrl).then(r => r.json()).then(data => geoMesh.addData(data)).catch(() => {});
 
     pale.addTo(map);
 
@@ -189,16 +189,17 @@
         "最新空中写真（地理院）": photo
     };
 
-    // レイヤーコントロールの初期化
     const layerControl = L.control.layers(baseMaps, {
-        "全国森林計画図 (林班)": rinyaRinpan,
-        "森林資源メッシュ": rinyaMesh
+        "全国森林計画図 (GeoJSON)": geoRinpan,
+        "森林資源メッシュ (GeoJSON)": geoMesh
     }, { collapsed: true }).addTo(map);
 
     // ==========================================
-    // 微地形図 (v1.7ベース) 生成機能
+    // 微地形図 (自動追従型) 生成機能
     // ==========================================
-    let reliefOverlay = null;
+    // ★v0.5修正: 新規に作り直すのではなく、1つのレイヤーの中身(URL)を差し替える仕様に変更
+    const reliefOverlay = L.imageOverlay('', [[0,0],[0,0]], { opacity: 0.8 });
+    layerControl.addOverlay(reliefOverlay, "赤色風微地形図 (オンで現在画面を計算)");
 
     const fetchDemTile = (x, y, z) => {
         return new Promise((resolve) => {
@@ -222,7 +223,6 @@
             map.removeLayer(reliefOverlay);
             return;
         }
-
         document.getElementById('loading-map').style.display = 'block';
         
         try {
@@ -308,11 +308,9 @@
             cropCtx.drawImage(canvas, pxWest, pxNorth, cropW, cropH, 0, 0, cropW, cropH);
             const dataUrl = cropCanvas.toDataURL('image/png');
             
-            if (reliefOverlay) { map.removeLayer(reliefOverlay); layerControl.removeLayer(reliefOverlay); }
-            reliefOverlay = L.imageOverlay(dataUrl, bounds, { opacity: 0.8 });
-            reliefOverlay.addTo(map);
-            
-            layerControl.addOverlay(reliefOverlay, "赤色風微地形図 (自動生成)");
+            // ★v0.5修正: オーバーレイの画像を上書きして使い回す（重複追加を防ぐ）
+            reliefOverlay.setUrl(dataUrl);
+            reliefOverlay.setBounds(bounds);
 
         } catch (error) {
             console.error(error);
@@ -321,12 +319,12 @@
         }
     }
 
-    reliefOverlay = L.imageOverlay('', [[0,0],[0,0]]);
-    layerControl.addOverlay(reliefOverlay, "赤色風微地形図 (チェックで生成)");
+    // ★v0.5修正: マップ移動後にレイヤーがONなら自動で再生成する追従ロジック
     map.on('overlayadd', function(e) {
-        if (e.name === "赤色風微地形図 (チェックで生成)") {
-            generateReliefMapOverlay();
-        }
+        if (e.layer === reliefOverlay) { generateReliefMapOverlay(); }
+    });
+    map.on('moveend', () => {
+        if (map.hasLayer(reliefOverlay)) { generateReliefMapOverlay(); }
     });
 
     // ==========================================
@@ -372,7 +370,11 @@
             
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
-            const coords = JSON.parse(data.candidates[0].content.parts[0].text);
+            
+            // ★v0.5修正: Markdownタグが混入しても安全にパースする処理
+            let text = data.candidates[0].content.parts[0].text;
+            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            const coords = JSON.parse(text);
             
             if (coords.lat && coords.lon) { map.setView([coords.lat, coords.lon], 14); } 
             else { throw new Error("座標データが正しく取得できませんでした"); }
@@ -402,30 +404,26 @@
             const targetModel = await getBestModel(apiKey);
             const center = map.getCenter();
             
-            // ★v0.3修正: プロンプトエンジニアリングを更に強化。表の構成と、シビアなコスト・地形推論を指示。
             const systemPrompt = `あなたは林業実務に特化した「GeoAIコンサルタント」です。
-現場の作業員や管理者がスマホで一目で理解できるよう、長文の解説は徹底的に排除し、Markdownの「表（Table）」を多用して視覚的なダッシュボード形式で回答してください。
+現場の作業員や管理者がスマホで一目で理解できるよう、長文の解説や前置きは徹底的に排除し、Markdownの「表（Table）」を多用して視覚的なダッシュボード形式で回答してください。挨拶は不要です。
 
 【対象エリア座標】緯度: ${center.lat.toFixed(4)}, 経度: ${center.lng.toFixed(4)}
 【ユーザー入力情報】
 ${userPrompt}
 
-以下の4つのセクションを必ず構成し、出力してください。
-タイトルは「GeoAIコンサルタントによる林業経営ダッシュボード」としてください。
+以下の4つのセクションを必ず構成し、出力してください。タイトルは「GeoAIコンサルタントによる林業経営ダッシュボード」としてください。
 
 1. **林分構成の推計（メッシュ換算）**
 入力された情報を元に、対象エリアの代表的な1haを想定し、樹種・林齢別の面積構成と材積を「20mメッシュ（400㎡）単位」で推計し、表形式で可視化してください。
-（表の項目例：林種・樹種、林齢、面積割合、面積(ha)、20mメッシュ数(概算)、メッシュあたり材積）
 
 2. **微地形と立地評価**
-指定座標（緯度経度）の一般的な地形特性を推測し、微地形（尾根・谷・急傾斜など）を考慮した路網整備・施業の注意点を箇条書きで簡潔に記載してください。
+指定座標の一般的な地形特性を推測し、微地形（尾根・谷・急傾斜など）を考慮した路網整備・施業の注意点を箇条書きで簡潔に記載してください。
 
 3. **バイオマス発電所へのアクセス評価**
-指定座標から推測される最寄りバイオマス発電所への概算距離（km）と、林地残材（C材など）の運搬に関するコスト的評価を表で示してください。
+指定座標から推測される最寄りバイオマス発電所への概算距離（km）と、林地残材の運搬に関するコスト的評価を表で示してください。
 
 4. **統合収支シミュレーション（1haあたり）**
-A/B/C材の木材収入、バイオマス材収入に加え、**架線や路網開設などの現実的な高いコスト**、さらに**J-クレジット（森林吸収系）による追加収益**を含め、また各施業の費用については林野庁の資料に基づいて赤字リスクも誤魔化さずシビアなトータル収支見込（純収益）を計算し、美しい一つの表にまとめてください。
-（表の項目例：項目、詳細内容、単位、単価(円)、数量、金額(円/ha)）`;
+A/B/C材の木材収入、バイオマス材収入に加え、架線や路網開設などの現実的な高いコスト、さらにJ-クレジット（森林吸収系）による追加収益を含め、赤字リスクも誤魔化さずシビアなトータル収支見込（純収益）を計算し、美しい一つの表にまとめてください。`;
 
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
                 method: 'POST',
