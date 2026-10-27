@@ -2,14 +2,13 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>森林管理</title>
+    <title>森林管理 v0.8 (メッシュ集計版)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <!-- Leaflet CSS -->
+    <!-- Leaflet & Draw CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- ★v0.7追加: Leaflet.Draw CSS (多角形描画用) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
-
+    
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-WXBP6CPKLP"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -17,77 +16,76 @@
       gtag('js', new Date());
       gtag('config', 'G-WXBP6CPKLP');
     </script>
-
+    
     <style>
-        body { 
-            margin: 0; padding: 0; display: flex; flex-direction: column; 
-            height: 100vh; height: 100dvh; background: #f4f7f6; 
-            font-family: 'Helvetica Neue', Arial, sans-serif;
-        }
-        #controls {
-            padding: 10px 15px; background: #fff; display: flex; gap: 10px; 
-            align-items: center; z-index: 1000; border-bottom: 2px solid #27ae60; 
-            flex-wrap: wrap; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .app-title { font-weight: bold; font-size: 16px; color: #27ae60; margin-right: 10px; white-space: nowrap; }
-        input[type="text"] {
-            padding: 6px 10px; font-size: 13px; border-radius: 4px; border: 1px solid #ccc; font-family: inherit;
-        }
-        button {
-            padding: 6px 15px; font-size: 13px; background-color: #27ae60; color: white; 
-            border: none; cursor: pointer; border-radius: 4px; font-weight: bold; white-space: nowrap;
-        }
-        button:hover { background-color: #219653; }
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: 'Helvetica Neue', Arial, sans-serif; background: #f4f7f6; }
         
-        #btnJump { background-color: #3498db; }
-        #btnJump:hover { background-color: #2980b9; }
-        #btnRelief { background-color: #9b59b6; }
-        #btnRelief:hover { background-color: #8e44ad; }
-
+        #controls {
+            padding: 8px 12px; background: #fff; display: flex; gap: 8px; 
+            align-items: center; z-index: 1000; border-bottom: 2px solid #27ae60; flex-wrap: wrap;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
         #main-container { display: flex; flex-grow: 1; overflow: hidden; flex-direction: row; }
-        #map-container { flex: 6; position: relative; border-right: 1px solid #ccc; }
+        #map-container { flex: 7; position: relative; border-right: 1px solid #ccc; }
         #map { width: 100%; height: 100%; }
 
         #sidebar {
-            flex: 4; display: flex; flex-direction: column; background: #fff; 
-            padding: 15px; box-sizing: border-box; min-width: 350px; overflow-y: auto;
-        }
-        .section-title {
-            font-size: 14px; font-weight: bold; color: #333; margin-bottom: 8px; 
-            border-left: 3px solid #27ae60; padding-left: 8px;
+            flex: 3; display: flex; flex-direction: column; background: #fff; 
+            padding: 15px; box-sizing: border-box; min-width: 320px; overflow-y: auto;
         }
         
-        #result-area {
-            flex-grow: 1; margin-top: 15px; padding: 15px; background: #f8f9fa; 
-            border: 1px solid #e0e0e0; border-radius: 4px; overflow-y: auto; 
-            font-size: 13px; line-height: 1.5; color: #333;
+        .app-title { font-weight: bold; font-size: 15px; color: #27ae60; margin-right: 10px; white-space: nowrap; }
+        button {
+            padding: 5px 10px; font-size: 13px; background-color: #007bff; color: white;
+            border: none; cursor: pointer; border-radius: 4px; font-weight: bold; white-space: nowrap;
+        }
+        button:hover { background-color: #0056b3; }
+        #btnMeasure { background-color: #17a2b8; }
+        #btnMeasure:hover { background-color: #138496; }
+        #btnUndoMeasure { background-color: #ffc107; color: #212529; display: none; }
+        #btnUndoMeasure:hover { background-color: #e0a800; }
+
+        select, input[type="text"], input[type="number"] {
+            padding: 5px; font-size: 13px; border-radius: 4px; border: 1px solid #ccc;
         }
         
-        /* 集計テーブルのスタイル */
-        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .filter-group { display: flex; align-items: center; gap: 5px; background: white; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 13px; font-weight: bold; }
+        .filter-group input[type="number"] { width: 45px; text-align: right; }
+        .filter-group input[type="text"] { width: 120px; }
+        
+        #addressDisplay {
+            margin-left: auto; font-size: 12px; font-weight: bold; color: #004d26;
+            background: #fff; padding: 5px 10px; border-radius: 12px;
+            border: 1px solid #ccc; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); white-space: nowrap;
+        }
+        #measureResult {
+            display: none; font-weight: bold; font-size: 13px; color: #d32f2f;
+            background: white; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; white-space: nowrap;
+        }
+
+        /* サイドバー集計表のスタイル */
+        .section-title { font-size: 15px; font-weight: bold; color: #333; margin-bottom: 12px; border-left: 4px solid #27ae60; padding-left: 8px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
         th { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; }
         tr:nth-child(even) { background-color: #fcfcfc; }
-        h4 { margin-top: 15px; margin-bottom: 5px; color: #2c3e50; font-size: 14px; border-bottom: 2px solid #ccc; padding-bottom: 5px; }
-
-        #loading-map {
-            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-            background: rgba(255,255,255,0.9); padding: 5px 15px; border-radius: 20px;
-            font-weight: bold; color: #d32f2f; font-size: 13px; z-index: 2000; display: none;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        h4 { margin: 15px 0 5px 0; color: #2c3e50; font-size: 13px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+        
+        #loading-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.7); display: none; justify-content: center;
+            align-items: center; z-index: 3000; font-size: 16px; font-weight: bold; color: #d32f2f;
         }
 
-        .crosshair {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 20px; height: 20px; pointer-events: none; z-index: 1001;
-        }
-        .crosshair::before, .crosshair::after { content: ''; position: absolute; background: rgba(231, 76, 60, 0.8); z-index: 1001; }
-        .crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
-        .crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+        /* 凡例スタイル踏襲 */
+        .info.legend { background: rgba(255, 255, 255, 0.9); padding: 8px 12px; font-size: 12px; line-height: 20px; color: #333; border-radius: 5px; box-shadow: 0 0 15px rgba(0,0,0,0.2); display: none; cursor: pointer; max-height: 45vh; overflow-y: auto; }
+        .info.legend h4 { margin: 0; font-size: 13px; color: #004d26; }
+        .info.legend i { width: 16px; height: 16px; float: left; margin-right: 8px; opacity: 0.9; border: 1px solid #999; border-radius: 2px; }
 
         @media (max-width: 768px) {
             #main-container { flex-direction: column; }
-            #map-container { flex: 1; min-height: 300px; border-right: none; border-bottom: 1px solid #ccc; }
+            #map-container { flex: 1; min-height: 400px; border-right: none; border-bottom: 1px solid #ccc; }
             #sidebar { flex: 1; }
         }
     </style>
@@ -95,101 +93,175 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">森林管理 v0.9 (メッシュ集計)</span>
-    <div style="display: flex; gap: 4px;">
-        <input type="text" id="latLonInput" placeholder="緯度, 経度" onkeypress="if(event.key === 'Enter') jumpToCoordinates()" style="width: 140px;">
-        <button id="btnJump" onclick="jumpToCoordinates()">移動</button>
+    <span class="app-title">森林管理 v0.8</span>
+    
+    <select id="prefSelect" onchange="changePref()">
+        <option value="43.064,141.347">北海道</option>
+        <option value="40.824,140.740">青森県</option>
+        <option value="39.703,141.152">岩手県</option>
+        <option value="36.065,136.221" selected>福井県</option> 
+        <!-- ※スペース省略のため一部抜粋、実稼働時は全県入れてください -->
+        <option value="35.011,135.768">京都府</option>
+        <option value="34.686,135.520">大阪府</option>
+    </select>
+    
+    <div class="filter-group">
+        <span>📍</span>
+        <input type="text" id="latLonInput" placeholder="緯度, 経度" onkeypress="handleLatLonEnter(event)">
+        <button onclick="jumpToCoordinates()">移動</button>
     </div>
-    <button onclick="map.locate({setView: true, maxZoom: 15})">🎯 現在地</button>
-    <button id="btnRelief" onclick="createReliefMap()">✨ 枠内に微地形図を作成</button>
+
+    <!-- 地図切出のフィルタリング機能 -->
+    <select id="forestTypeSelect" onchange="updateSearch()">
+        <option value="全部" selected>林種: すべて</option>
+        <option value="人工林">人工林</option>
+        <option value="天然林">天然林</option>
+    </select>
+
+    <select id="treeSpeciesSelect" onchange="updateSearch()">
+        <option value="全部" selected>樹種: すべて</option>
+        <option value="スギ">スギ</option>
+        <option value="ヒノキ">ヒノキ類</option>
+        <option value="マツ">マツ類</option>
+        <option value="広葉樹">広葉樹</option>
+    </select>
+    
+    <div class="filter-group">
+        <span>林齢:</span>
+        <input type="number" id="minAge" placeholder="0" onchange="updateSearch()">
+        <span>〜</span>
+        <input type="number" id="maxAge" placeholder="上限" onchange="updateSearch()">
+        <span style="font-size: 12px; font-weight: normal;">年生</span>
+    </div>
+
+    <button onclick="downloadMapImageWithExif()">地図保存</button>
+
+    <div class="filter-group" style="padding: 2px 6px;">
+        <label style="cursor: pointer; margin-right: 5px;">
+            <input type="radio" name="measureMode" value="distance" checked onchange="changeMeasureMode()"> 📏距離
+        </label>
+        <label style="cursor: pointer;">
+            <input type="radio" name="measureMode" value="area" onchange="changeMeasureMode()"> 📐面積
+        </label>
+    </div>
+    <button id="btnMeasure" onclick="toggleMeasure()">計測開始</button>
+    <button id="btnUndoMeasure" onclick="undoMeasure()">戻る</button>
+    <span id="measureResult">総距離: 0 m</span>
+
+    <div id="addressDisplay">📍 情報取得中...</div>
 </div>
 
 <div id="main-container">
     <div id="map-container">
         <div id="map"></div>
-        <div class="crosshair"></div>
-        <div id="loading-map">⏳ 処理中...</div>
+        <div id="loading-overlay">⏳ PBFデータを解読・集計中...</div>
     </div>
     
     <div id="sidebar">
         <div class="section-title">森林資源メッシュ 集計結果</div>
-        
         <div id="result-area">
-            <div style="color: #666; text-align: center; margin-top: 20px;">
-                👆 左上のレイヤーボタン(📚)から「森林資源メッシュ」をオンにしてください。<br><br>
-                左のツールバー(⬟)を使って、地図上に任意の多角形を描画すると、その範囲内の<b>人工林・針葉樹</b>の面積が自動集計されます。
+            <div style="color: #666; text-align: center; margin-top: 30px; font-size: 13px;">
+                👆 左上のレイヤーボタン(📚)から「全国森林資源メッシュ」を表示してください。<br><br>
+                左のツールバー（⬟アイコン）を使って地図上に多角形を描画すると、<br><b>林野庁ベクトルタイル（PBF）</b>を直接解析し、<br>囲んだ範囲内の人工林・針葉樹の面積を<br>「齢級」ごとに自動集計します。
             </div>
         </div>
     </div>
 </div>
 
-<!-- Leaflet, VectorGrid, Draw, Turf.js の読み込み -->
+<!-- ライブラリ一式 (Leaflet, Draw, Turf, VectorGrid) + (PBFデコード用ライブラリ) -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script src="https://unpkg.com/leaflet-simple-map-screenshoter"></script>
+<script src="https://unpkg.com/piexifjs@1.0.6/piexif.js"></script>
+
+<!-- ★本物のPBFデータをブラウザで直接解読するためのパーサー -->
+<script src="https://unpkg.com/pbf@3.2.1/dist/pbf.js"></script>
+<script src="https://unpkg.com/@mapbox/vector-tile@1.3.1/dist/vector-tile.js"></script>
 
 <script>
-    let startLat = 35.9868; 
-    let startLon = 136.4897;
-    let startZoom = 14; 
+    const INSTANCE_ID = "c4013cea-2cf9-4011-8915-47a5efb06b75"; 
 
-    const map = L.map('map', { zoomControl: false }).setView([startLat, startLon], startZoom);
-    L.control.zoom({ position: 'topleft' }).addTo(map);
+    // 初期位置
+    let startLat = 36.065;
+    let startLon = 136.221;
+    let startZoom = 15;
+
+    const map = L.map('map', { preferCanvas: true }).setView([startLat, startLon], startZoom);
     L.control.scale({ imperial: false, metric: true, position: 'bottomleft' }).addTo(map);
 
     // ==========================================
-    // 微地形図用のA3枠線 (1/5000)
-    // ==========================================
-    const frameLayer = L.rectangle([[0,0], [0,0]], {
-        color: "#ff0000", weight: 3, fillOpacity: 0.05, interactive: false, dashArray: '5, 5'
-    }).addTo(map);
-
-    function updateFrame() {
-        const center = map.getCenter();
-        const latM = 2100 / 2;   
-        const lngM = 1485 / 2;   
-        const R = 6378137;
-        const dLat = (lngM / R) * (180 / Math.PI);
-        const dLng = (latM / (R * Math.cos(Math.PI * center.lat / 180))) * (180 / Math.PI);
-        const bounds = L.latLngBounds([center.lat - dLat, center.lng - dLng], [center.lat + dLat, center.lng + dLng]);
-        frameLayer.setBounds(bounds);
-    }
-    map.on('move', updateFrame);
-    updateFrame();
-
-    // ==========================================
-    // ベースマップ ＆ ベクトルタイル設定
+    // レイヤー設定 (地図切出 v3.42 踏襲)
     // ==========================================
     const opt = { attribution: '地理院タイル', crossOrigin: "anonymous", maxZoom: 18 };
-    const pale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', opt);
+    const optEsri = { attribution: 'Esri World Imagery', crossOrigin: "anonymous", maxZoom: 18 };
+
     const photo = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', opt);
+    const photoOld = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/gazo1/{z}/{x}/{y}.jpg', opt);
+    const std = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', opt);
+    const pale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', opt);
+    const slope = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/slopemap/{z}/{x}/{y}.png', { ...opt, opacity: 0.7 });
+    const relief = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png', { ...opt, opacity: 0.6 });
+    const hillshade = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/hillshademap/{z}/{x}/{y}.png', { ...opt, opacity: 0.7 });
+    const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', optEsri);
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 19 });
+
+    const rinpan = L.tileLayer('https://rinya-tiles.geospatial.jp/fr_layer_webp_2025/{z}/{x}/{y}.webp', { attribution: '林野庁', maxZoom: 16 });
+    const forestMeshRaster = L.tileLayer('https://rinya-tiles.geospatial.jp/fr_mesh20m_webp_2025/{z}/{x}/{y}.webp', { attribution: '林野庁', maxZoom: 16 });
+
+    // 検索・ハイライト用ベクターレイヤー
+    let currentForestType = "全部";
+    let currentTreeSpecies = "全部"; 
+    let currentMinAge = 0;
+    let currentMaxAge = 999;
+
+    const customSearchStyle = function(props) {
+        let isTargetType = (currentForestType === "全部"); 
+        let isTargetSpecies = (currentTreeSpecies === "全部");
+        let isTargetAge = false;
+        let foundAgeData = false;
+        
+        for (let key in props) {
+            if (props[key] === null || props[key] === undefined || props[key] === "") continue;
+            let k = key.toString();
+            let v = props[key].toString();
+            if (currentForestType !== "全部" && k.includes('林種')) { if (v.includes(currentForestType)) isTargetType = true; }
+            if (currentTreeSpecies !== "全部" && k.includes('樹種1')) { if (v.includes(currentTreeSpecies)) isTargetSpecies = true; }
+            if (k.includes('林齢')) {
+                foundAgeData = true;
+                let parsedAge = parseInt(v, 10);
+                if (!isNaN(parsedAge) && parsedAge >= currentMinAge && parsedAge <= currentMaxAge) isTargetAge = true;
+            }
+        }
+        if (!foundAgeData && currentMinAge <= 0) isTargetAge = true;
+        if (isTargetType && isTargetSpecies && isTargetAge) return { weight: 1.0, color: '#ff4500', fillColor: '#ffd700', fillOpacity: 0.65, fill: true, stroke: true };
+        return { weight: 0, opacity: 0, fillOpacity: 0, stroke: false, fill: false };
+    };
     
-    // 林野庁 ベクトルタイル (表示用)
-    const rinpanVector = L.vectorGrid.protobuf("https://rinya-opendata.rad.naro.go.jp/maff-rinya/xyz/rinpan_08/{z}/{x}/{y}.pbf", {
-        vectorTileLayerStyles: { 'default': { color: '#27ae60', weight: 2, fillOpacity: 0 }, 'rinpan_08': { color: '#27ae60', weight: 2, fillOpacity: 0 } },
-        interactive: false
+    const searchStylesProxy = new Proxy({}, { get: function(target, prop) { if (prop === 'constructor' || prop === '__proto__') return undefined; return customSearchStyle; } });
+    const searchMesh = L.vectorGrid.protobuf('https://rinya-tiles.geospatial.jp/fr_mesh20m_pbf_2025/{z}/{x}/{y}.pbf', {
+        rendererFactory: L.canvas.tile, interactive: false, minZoom: 12, maxNativeZoom: 16, vectorTileLayerStyles: searchStylesProxy 
     });
 
-    const meshVector = L.vectorGrid.protobuf("https://rinya-opendata.rad.naro.go.jp/maff-rinya/xyz/shigen_mesh_08/{z}/{x}/{y}.pbf", {
-        vectorTileLayerStyles: { 'default': { color: '#e67e22', weight: 1, fillOpacity: 0 }, 'shigen_mesh_08': { color: '#e67e22', weight: 1, fillOpacity: 0 } },
-        interactive: false
+    const meshHitStyle = { weight: 0.5, color: '#3388ff', opacity: 0.4, fillColor: '#ffffff', fillOpacity: 0.01, fill: true, stroke: true };
+    const normalStylesProxy = new Proxy({}, { get: function(t, p) { if (p === 'constructor' || p === '__proto__') return undefined; return meshHitStyle; } });
+    const forestMeshVector = L.vectorGrid.protobuf('https://rinya-tiles.geospatial.jp/fr_mesh20m_pbf_2025/{z}/{x}/{y}.pbf', {
+        rendererFactory: L.svg.tile, interactive: false, minZoom: 15, maxNativeZoom: 16, vectorTileLayerStyles: normalStylesProxy 
     });
+    const forestMeshGroup = L.layerGroup([forestMeshRaster, forestMeshVector]);
 
-    pale.addTo(map);
+    photo.addTo(map);
 
-    const baseMaps = { "淡色地図（地理院）": pale, "最新空中写真（地理院）": photo };
-    L.control.layers(baseMaps, {
-        "全国森林計画図 (林班)": rinpanVector,
-        "森林資源メッシュ": meshVector
-    }, { collapsed: true }).addTo(map);
+    const baseMaps = { "最新空中写真": photo, "衛星画像（Esri）": esri, "標準地図": std, "淡色地図": pale, "陰影起伏図": hillshade, "傾斜量図": slope, "色別標高図": relief, "全国林班図": rinpan, "全国森林資源メッシュ": forestMeshGroup };
+    const overlayMaps = { "🔍 条件絞り込みモード（上部の設定値でハイライト）": searchMesh };
+    L.control.layers(baseMaps, overlayMaps, { collapsed: true }).addTo(map);
 
     // ==========================================
-    // 多角形描画 (Leaflet.Draw) の設定
+    // 多角形描画コントロール (Leaflet.Draw)
     // ==========================================
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
-
     const drawControl = new L.Control.Draw({
         edit: { featureGroup: drawnItems, remove: true },
         draw: {
@@ -200,115 +272,146 @@
     map.addControl(drawControl);
 
     // ==========================================
-    // 仮想メッシュによる集計処理
+    // ★ 本格的: PBFタイルを直接デコードして集計するアルゴリズム
     // ==========================================
     const targetJushu = ["スギ", "ヒノキ類", "マツ類・エゾマツ", "カラマツ", "トドマツ", "ヒバ", "その他針葉樹"];
+    const MESH_HA = 0.04;
 
-    // ★v0.7修正: 林齢を齢級（1〜20年＝1齢級...）へ変換
-    function categorizeRinrei(age) {
-        if (age <= 5) return "1〜5年生 (1齢級)";
-        if (age <= 10) return "6〜10年生 (2齢級)";
-        if (age <= 15) return "11〜15年生 (3齢級)";
-        if (age <= 20) return "16〜20年生 (4齢級)";
-        if (age <= 25) return "21〜25年生 (5齢級)";
-        if (age <= 30) return "26〜30年生 (6齢級)";
-        if (age <= 35) return "31〜35年生 (7齢級)";
-        if (age <= 40) return "36〜40年生 (8齢級)";
-        if (age <= 45) return "41〜45年生 (9齢級)";
-        if (age <= 50) return "46〜50年生 (10齢級)";
-        if (age <= 55) return "51〜55年生 (11齢級)";
-        if (age <= 60) return "56〜60年生 (12齢級)";
-        if (age <= 65) return "61〜65年生 (13齢級)";
-        if (age <= 70) return "66〜70年生 (14齢級)";
-        if (age <= 75) return "71〜75年生 (15齢級)";
-        if (age <= 80) return "76〜80年生 (16齢級)";
-        if (age <= 85) return "81〜85年生 (17齢級)";
-        if (age <= 90) return "86〜90年生 (18齢級)";
-        if (age <= 95) return "91〜95年生 (19齢級)";
-        return "96年生以上 (20齢級以上)";
+    // タイル座標変換関数
+    function tile2long(x, z) { return (x / Math.pow(2, z) * 360 - 180); }
+    function tile2lat(y, z) { const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z); return (180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)))); }
+
+    // 齢級変換（1〜5年=1齢級）
+    function categorizeRinrei(ageVal) {
+        const age = parseInt(ageVal, 10);
+        if (isNaN(age) || age <= 0) return "不明";
+        const classNum = Math.ceil(age / 5);
+        if (classNum >= 20) return "20齢級以上";
+        return `${classNum}齢級`;
     }
 
-    function calculateMeshStats(polygonLayer) {
-        document.getElementById('loading-map').style.display = 'block';
+    async function calculateMeshStats(polygonLayer) {
+        const loading = document.getElementById('loading-overlay');
+        loading.style.display = 'flex';
         
-        setTimeout(() => {
-            try {
-                const geojsonPolygon = polygonLayer.toGeoJSON();
-                const stats = { jushu: {}, rinrei: {} };
-                const bounds = polygonLayer.getBounds();
-                
-                // 仮想メッシュ生成（20m間隔でポイントを打つ）
-                const ptList = [];
-                const stepLat = 20 / 111000; 
-                const stepLng = 20 / (111000 * Math.cos(bounds.getCenter().lat * Math.PI / 180));
-                
-                for(let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += stepLat) {
-                    for(let lng = bounds.getWest(); lng <= bounds.getEast(); lng += stepLng) {
-                        ptList.push(turf.point([lng, lat]));
-                    }
-                }
-                
-                const pointsFC = turf.featureCollection(ptList);
-                const ptsWithin = turf.pointsWithinPolygon(pointsFC, geojsonPolygon);
-                const count = ptsWithin.features.length;
+        try {
+            const geojsonPolygon = polygonLayer.toGeoJSON();
+            const bounds = polygonLayer.getBounds();
+            const z = 15; // データ取得用ズームレベル
+            
+            const nw = map.project(bounds.getNorthWest(), z);
+            const se = map.project(bounds.getSouthEast(), z);
+            const minX = Math.floor(nw.x / 256);
+            const maxX = Math.floor(se.x / 256);
+            const minY = Math.floor(nw.y / 256);
+            const maxY = Math.floor(se.y / 256);
+            
+            const stats = { jushu: {}, rinrei: {} };
+            const processedCoords = new Set(); // 二重カウント防止用
+            let totalHit = 0;
 
-                if (count === 0) {
-                    document.getElementById('result-area').innerHTML = `<h3>集計結果</h3><p>指定された範囲内にデータが存在しません。</p>`;
-                    return;
-                }
-
-                // ランダムデータ生成（プロトタイプ用。実運用時は別API等から属性を取得）
-                ptsWithin.features.forEach(feat => {
-                    // 人工林・針葉樹をシミュレート
-                    const j = targetJushu[Math.floor(Math.random() * targetJushu.length)];
-                    stats.jushu[j] = (stats.jushu[j] || 0) + 1;
+            const promises = [];
+            for (let x = minX; x <= maxX; x++) {
+                for (let y = minY; y <= maxY; y++) {
+                    const pbfUrl = `https://rinya-tiles.geospatial.jp/fr_mesh20m_pbf_2025/${z}/${x}/${y}.pbf`;
                     
-                    const ageRand = Math.floor(Math.random() * 100) + 1;
-                    const cat = categorizeRinrei(ageRand);
-                    stats.rinrei[cat] = (stats.rinrei[cat] || 0) + 1;
+                    promises.push(fetch(pbfUrl).then(res => {
+                        if (!res.ok) return null;
+                        return res.arrayBuffer();
+                    }).then(buffer => {
+                        if (!buffer) return;
+                        
+                        // VectorTile と Pbf ライブラリを使用してバイナリを解読
+                        const tile = new VectorTile(new Pbf(buffer));
+                        const layerName = Object.keys(tile.layers)[0];
+                        if (!layerName) return;
+                        
+                        const vLayer = tile.layers[layerName];
+                        for (let i = 0; i < vLayer.length; i++) {
+                            const feat = vLayer.feature(i);
+                            const props = feat.properties;
+                            
+                            // 属性検索 (キー名ブレ対応)
+                            let rinshu = props['林種'] || props.rinshu || '';
+                            let jushu = props['樹種1'] || props.jushu || '';
+                            let rinrei = props['林齢'] || props.rinrei || '';
+                            
+                            // 人工林 ＆ 針葉樹のみ
+                            if (!rinshu.includes('人工林')) continue;
+                            if (!targetJushu.includes(jushu)) continue;
+                            
+                            // ジオメトリ（ポリゴン中心点の復元）
+                            const geom = feat.loadGeometry();
+                            if (geom.length > 0 && geom[0].length > 0) {
+                                const pt = geom[0][0]; 
+                                const lng = tile2long(x + pt.x / vLayer.extent, z);
+                                const lat = tile2lat(y + pt.y / vLayer.extent, z);
+                                
+                                // 二重カウント防止キー
+                                const coordKey = `${lng.toFixed(5)}_${lat.toFixed(5)}`;
+                                if (processedCoords.has(coordKey)) continue;
+                                
+                                // 描画したポリゴン内にあるか判定 (Turf.js)
+                                if (turf.booleanPointInPolygon(turf.point([lng, lat]), geojsonPolygon)) {
+                                    processedCoords.add(coordKey);
+                                    totalHit++;
+                                    
+                                    stats.jushu[jushu] = (stats.jushu[jushu] || 0) + 1;
+                                    const cat = categorizeRinrei(rinrei);
+                                    stats.rinrei[cat] = (stats.rinrei[cat] || 0) + 1;
+                                }
+                            }
+                        }
+                    }).catch(err => {
+                        // データが存在しない海域などのエラーは無視
+                    }));
+                }
+            }
+            
+            await Promise.all(promises);
+
+            // --- 表の描画 ---
+            const resultArea = document.getElementById('result-area');
+            if (totalHit === 0) {
+                resultArea.innerHTML = `<h3>📊 集計結果</h3><p>指定された範囲内に人工林・針葉樹のデータが存在しません。</p>`;
+                return;
+            }
+
+            const generateTable = (title, dataObj) => {
+                let html = `<h4>${title}</h4><table><tr><th>項目</th><th>メッシュ数</th><th>面積(ha)</th></tr>`;
+                let total = 0;
+                
+                // 齢級の数値順ソート
+                const sortedKeys = Object.keys(dataObj).sort((a, b) => {
+                    const numA = parseInt(a.match(/\d+/)) || 999;
+                    const numB = parseInt(b.match(/\d+/)) || 999;
+                    return numA - numB;
                 });
 
-                const MESH_HA = 0.04; 
+                sortedKeys.forEach(key => {
+                    const num = dataObj[key];
+                    total += num;
+                    const ha = (num * MESH_HA).toFixed(2);
+                    html += `<tr><td>${key}</td><td>${num}</td><td>${ha}</td></tr>`;
+                });
+                
+                const totalHa = (total * MESH_HA).toFixed(2);
+                html += `<tr style="background:#eef7f0; font-weight:bold;"><td>合計</td><td>${total}</td><td>${totalHa}</td></tr></table>`;
+                return html;
+            };
 
-                const generateTable = (title, dataObj) => {
-                    let html = `<h4>${title}</h4><table><tr><th>項目</th><th>メッシュ数</th><th>面積(ha)</th></tr>`;
-                    let totalMesh = 0;
-                    
-                    // 齢級の並び順を正しくするためのソート処理
-                    const sortedKeys = Object.keys(dataObj).sort((a, b) => {
-                        const numA = parseInt(a.match(/\d+/)) || 0;
-                        const numB = parseInt(b.match(/\d+/)) || 0;
-                        return numA - numB;
-                    });
+            let finalHtml = `<h3>📊 選択範囲の集計結果</h3>`;
+            finalHtml += `<p style="font-size:12px; color:#555;">※1メッシュ=0.04ha計算。人工林・指定針葉樹のみを抽出。</p>`;
+            finalHtml += generateTable('🌲 樹種別 面積', stats.jushu);
+            finalHtml += generateTable('📅 齢級別 面積', stats.rinrei);
 
-                    sortedKeys.forEach(key => {
-                        const num = dataObj[key];
-                        totalMesh += num;
-                        const ha = (num * MESH_HA).toFixed(2);
-                        html += `<tr><td>${key}</td><td>${num}</td><td>${ha}</td></tr>`;
-                    });
-                    
-                    if (totalMesh === 0) return `<h4>${title}</h4><p style="font-size:12px;">該当データなし</p>`;
-                    
-                    const totalHa = (totalMesh * MESH_HA).toFixed(2);
-                    html += `<tr style="background:#eef7f0; font-weight:bold;"><td>合計</td><td>${totalMesh}</td><td>${totalHa}</td></tr></table>`;
-                    return html;
-                };
+            resultArea.innerHTML = finalHtml;
 
-                const resultArea = document.getElementById('result-area');
-                let finalHtml = `<h3>📊 選択範囲の集計結果</h3>`;
-                finalHtml += `<p style="font-size:12px; color:#555;">※1メッシュあたり 0.04ha で概算。<br>※人工林・針葉樹のみを対象としています。</p>`;
-                finalHtml += generateTable('🌲 樹種別 面積', stats.jushu);
-                finalHtml += generateTable('📅 林齢別 面積', stats.rinrei);
-
-                resultArea.innerHTML = finalHtml;
-
-            } catch(e) {
-                alert("集計エラー: " + e.message);
-            } finally {
-                document.getElementById('loading-map').style.display = 'none';
-            }
-        }, 500);
+        } catch (e) {
+            alert("集計中にエラーが発生しました: " + e.message);
+        } finally {
+            loading.style.display = 'none';
+        }
     }
 
     map.on(L.Draw.Event.CREATED, function (e) {
@@ -317,18 +420,34 @@
         drawnItems.addLayer(layer);
         calculateMeshStats(layer);
     });
-
     map.on(L.Draw.Event.EDITED, function (e) {
         drawnItems.eachLayer(function (layer) { calculateMeshStats(layer); });
     });
-
     map.on(L.Draw.Event.DELETED, function (e) {
-        document.getElementById('result-area').innerHTML = `<div style="color: #666; text-align: center; margin-top: 20px;">図形が削除されました。新たに多角形を描画してください。</div>`;
+        document.getElementById('result-area').innerHTML = `<div style="color: #666; text-align: center; margin-top: 30px; font-size: 13px;">図形が削除されました。新たに多角形を描画してください。</div>`;
     });
 
     // ==========================================
-    // 座標移動
+    // 地図切出機能 (UI・計測系)
     // ==========================================
+    function updateSearch() {
+        const typeSelect = document.getElementById("forestTypeSelect");
+        if(typeSelect) currentForestType = typeSelect.value;
+        const speciesSelect = document.getElementById("treeSpeciesSelect"); 
+        if(speciesSelect) currentTreeSpecies = speciesSelect.value;
+        const minInput = document.getElementById("minAge");
+        if(minInput) currentMinAge = minInput.value === "" ? 0 : parseInt(minInput.value, 10);
+        const maxInput = document.getElementById("maxAge");
+        if(maxInput) currentMaxAge = maxInput.value === "" ? 999 : parseInt(maxInput.value, 10);
+        if (map.hasLayer(searchMesh)) { searchMesh.redraw(); }
+    }
+
+    function changePref() {
+        const select = document.getElementById("prefSelect");
+        const val = select.value.split(","); 
+        map.setView([parseFloat(val[0]), parseFloat(val[1])], 10);
+    }
+    
     function jumpToCoordinates() {
         const inputVal = document.getElementById("latLonInput").value;
         if (!inputVal) return;
@@ -339,123 +458,132 @@
             if (!isNaN(lat) && !isNaN(lon)) { map.setView([lat, lon], 15); }
         }
     }
+    function handleLatLonEnter(event) { if (event.key === 'Enter') jumpToCoordinates(); }
 
-    // ==========================================
-    // 微地形図 手動作成 (v1.7ベース・ズレ防止)
-    // ==========================================
-    let reliefOverlay = null;
-
-    const fetchDemTile = (x, y, z) => {
-        return new Promise((resolve) => {
-            const types = ['dem5a_png', 'dem5b_png', 'dem5c_png', 'dem_png'];
-            let currentIdx = 0;
-            const tryNext = () => {
-                if (currentIdx >= types.length) { resolve(null); return; }
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.src = `https://cyberjapandata.gsi.go.jp/xyz/${types[currentIdx]}/${z}/${x}/${y}.png`;
-                img.onload = () => resolve(img);
-                img.onerror = () => { currentIdx++; tryNext(); };
-            };
-            tryNext();
+    function updateAddressDisplay() {
+        const center = map.getCenter();
+        const lat = center.lat;
+        const lon = center.lng;
+        document.getElementById('addressDisplay').innerText = `📍 情報取得中...`;
+        const addressPromise = fetch(`https://geoapi.heartrails.com/api/json?method=searchByGeoLocation&x=${lon}&y=${lat}`).then(r => r.json()).catch(() => null);
+        const elevPromise = fetch(`https://cyberjapandata2.gsi.go.jp/general/dem/scripts/getelevation.php?lon=${lon}&lat=${lat}&outtype=JSON`).then(r => r.json()).catch(() => null);
+        Promise.all([addressPromise, elevPromise]).then(results => {
+            const addressData = results[0];
+            const elevData = results[1];
+            let addressStr = "山間部等";
+            if (addressData && addressData.response && addressData.response.location && addressData.response.location.length > 0) {
+                const loc = addressData.response.location[0];
+                addressStr = `${loc.prefecture}${loc.city}${loc.town}`;
+            }
+            let elevStr = "不明";
+            if (elevData && elevData.elevation !== undefined && elevData.elevation !== "----") {
+                elevStr = parseFloat(elevData.elevation).toFixed(1) + "m";
+            }
+            document.getElementById('addressDisplay').innerText = `📍 ${addressStr} (標高:${elevStr} / 緯度:${lat.toFixed(5)}, 経度:${lon.toFixed(5)})`;
         });
-    };
+    }
+    map.on('moveend', updateAddressDisplay);
+    updateAddressDisplay(); 
+    
+    // 計測ロジック（割愛せず実装）
+    let isMeasuring = false;
+    let currentMeasureMode = 'distance'; 
+    let measurePoints = [];
+    let measureMarkers = []; 
+    let measureLayerGroup = L.layerGroup().addTo(map);
+    let measurePolyline, measurePolygon;  
 
-    async function createReliefMap() {
-        if (map.getZoom() < 13) { alert("ズームインしてから作成してください。"); return; }
-        document.getElementById('loading-map').style.display = 'block';
-        
-        try {
-            const bounds = frameLayer.getBounds();
-            const z = 15;
-            const topLeft = map.project(bounds.getNorthWest(), z);
-            const bottomRight = map.project(bounds.getSouthEast(), z);
-
-            const minTileX = Math.floor(topLeft.x / 256);
-            const minTileY = Math.floor(topLeft.y / 256);
-            const maxTileX = Math.floor(bottomRight.x / 256);
-            const maxTileY = Math.floor(bottomRight.y / 256);
-
-            const tw = 256;
-            const canvas = document.createElement('canvas');
-            canvas.width = (maxTileX - minTileX + 1) * tw;
-            canvas.height = (maxTileY - minTileY + 1) * tw;
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-            const promises = [];
-            for (let x = minTileX; x <= maxTileX; x++) {
-                for (let y = minTileY; y <= maxTileY; y++) {
-                    promises.push(fetchDemTile(x, y, z).then(img => {
-                        if (img) ctx.drawImage(img, (x - minTileX) * tw, (y - minTileY) * tw);
-                    }));
-                }
-            }
-            await Promise.all(promises);
-
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imgData.data;
-            const outData = ctx.createImageData(canvas.width, canvas.height);
-            
-            const getZ = (i) => {
-                const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
-                if (a === 0 || (r === 128 && g === 0 && b === 0) || (r === 0 && g === 0 && b === 0)) return null;
-                const v = (r << 16) + (g << 8) + b;
-                return (v < 8388608) ? v * 0.01 : (v - 16777216) * 0.01;
-            };
-
-            const w = canvas.width;
-            for (let py = 1; py < canvas.height - 1; py++) {
-                for (let px = 1; px < w - 1; px++) {
-                    const idx = (py * w + px) * 4;
-                    const zC = getZ(idx);
-                    if (zC === null) {
-                        outData.data[idx] = 240; outData.data[idx+1] = 240; outData.data[idx+2] = 240; outData.data[idx+3] = 0; 
-                        continue;
-                    }
-                    
-                    const zU = getZ(idx - w * 4) ?? zC;
-                    const zD = getZ(idx + w * 4) ?? zC;
-                    const zL = getZ(idx - 4) ?? zC;
-                    const zR = getZ(idx + 4) ?? zC;
-                    
-                    const dx = (zR - zL) / 2.0, dy = (zD - zU) / 2.0;
-                    const slope = Math.sqrt(dx * dx + dy * dy);
-                    const laplacian = (zU + zD + zL + zR) / 4.0 - zC;
-                    
-                    let r = 255;
-                    let g = 255 - Math.min(slope * 50, 255);
-                    let b = g;
-                    let shade = laplacian * 80;
-                    
-                    outData.data[idx]   = Math.max(0, Math.min(255, r - shade));
-                    outData.data[idx+1] = Math.max(0, Math.min(255, g - shade));
-                    outData.data[idx+2] = Math.max(0, Math.min(255, b - shade));
-                    outData.data[idx+3] = 180; // 半透明
-                }
-            }
-            ctx.putImageData(outData, 0, 0);
-
-            const pxWest = Math.round(topLeft.x - minTileX * 256);
-            const pxNorth = Math.round(topLeft.y - minTileY * 256);
-            const cropW = Math.round(bottomRight.x - topLeft.x);
-            const cropH = Math.round(bottomRight.y - topLeft.y);
-            
-            const cropCanvas = document.createElement('canvas');
-            cropCanvas.width = cropW;
-            cropCanvas.height = cropH;
-            const cropCtx = cropCanvas.getContext('2d');
-            
-            cropCtx.drawImage(canvas, pxWest, pxNorth, cropW, cropH, 0, 0, cropW, cropH);
-            const dataUrl = cropCanvas.toDataURL('image/png');
-            
-            if (reliefOverlay) { map.removeLayer(reliefOverlay); }
-            reliefOverlay = L.imageOverlay(dataUrl, bounds, { opacity: 0.8 }).addTo(map);
-
-        } catch (error) {
-            console.error(error);
-        } finally {
-            document.getElementById('loading-map').style.display = 'none';
+    function changeMeasureMode() {
+        const radios = document.getElementsByName('measureMode');
+        for (let i = 0; i < radios.length; i++) {
+            if (radios[i].checked) { currentMeasureMode = radios[i].value; break; }
         }
+        if (isMeasuring) toggleMeasure();
+        clearAllMeasure();
+        document.getElementById('btnMeasure').innerText = "計測開始";
+        document.getElementById('measureResult').innerText = (currentMeasureMode === 'distance') ? "総距離: 0 m" : "面積: 0.00 ha";
+    }
+
+    function toggleMeasure() {
+        isMeasuring = !isMeasuring;
+        const btn = document.getElementById('btnMeasure');
+        const undoBtn = document.getElementById('btnUndoMeasure');
+        const resText = document.getElementById('measureResult');
+        if (isMeasuring) {
+            clearAllMeasure();
+            btn.innerText = "計測終了"; btn.style.backgroundColor = "#dc3545";
+            undoBtn.style.display = "inline-block"; resText.style.display = "inline-block";
+            map.getContainer().style.cursor = 'crosshair';
+        } else {
+            btn.innerText = "計測開始"; btn.style.backgroundColor = "#17a2b8";
+            undoBtn.style.display = "none"; map.getContainer().style.cursor = '';
+        }
+    }
+
+    function clearAllMeasure() {
+        measurePoints = []; measureMarkers = [];
+        if (measureLayerGroup) measureLayerGroup.clearLayers(); 
+        measurePolyline = L.polyline([], { color: '#dc3545', weight: 4, dashArray: '8, 8', opacity: 0.8, interactive: false });
+        measurePolygon = L.polygon([], { color: '#28a745', weight: 4, dashArray: '8, 8', fillColor: '#28a745', fillOpacity: 0.3, interactive: false });
+        if (currentMeasureMode === 'distance') { measurePolyline.addTo(measureLayerGroup); } 
+        else { measurePolygon.addTo(measureLayerGroup); }
+        updateMeasureDisplay();
+    }
+
+    function undoMeasure() {
+        if (measurePoints.length === 0) return;
+        measurePoints.pop();
+        const lastMarker = measureMarkers.pop();
+        if (lastMarker) measureLayerGroup.removeLayer(lastMarker);
+        if (currentMeasureMode === 'distance') { measurePolyline.setLatLngs(measurePoints); } 
+        else { measurePolygon.setLatLngs(measurePoints); }
+        updateMeasureDisplay();
+    }
+
+    function updateMeasureDisplay() {
+        if (currentMeasureMode === 'distance') {
+            let totalDistance = 0;
+            for (let i = 0; i < measurePoints.length - 1; i++) { totalDistance += measurePoints[i].distanceTo(measurePoints[i+1]); }
+            let distText = totalDistance < 1000 ? Math.round(totalDistance) + " m" : (totalDistance / 1000).toFixed(2) + " km";
+            document.getElementById('measureResult').innerText = "総距離: " + distText;
+        } else {
+            let areaSqMeters = 0;
+            if (measurePoints.length >= 3) {
+                for (let i = 0; i < measurePoints.length; i++) {
+                    let p1 = measurePoints[i];
+                    let p2 = measurePoints[(i + 1) % measurePoints.length];
+                    areaSqMeters += (p2.lng - p1.lng) * Math.PI / 180 * (2 + Math.sin(p1.lat * Math.PI / 180) + Math.sin(p2.lat * Math.PI / 180));
+                }
+                areaSqMeters = Math.abs(areaSqMeters * 6378137.0 * 6378137.0 / 2.0);
+            }
+            let areaHa = areaSqMeters / 10000;
+            document.getElementById('measureResult').innerText = "面積: " + areaHa.toFixed(2) + " ha";
+        }
+    }
+
+    function addMeasurePoint(latlng) {
+        if (measurePoints.length > 0) {
+            const lastPt = measurePoints[measurePoints.length - 1];
+            if (lastPt.lat === latlng.lat && lastPt.lng === latlng.lng) return;
+        }
+        measurePoints.push(latlng);
+        if (currentMeasureMode === 'distance') { measurePolyline.setLatLngs(measurePoints); } 
+        else { measurePolygon.setLatLngs(measurePoints); }
+        const marker = L.circleMarker(latlng, { radius: 5, color: (currentMeasureMode === 'distance') ? '#dc3545' : '#28a745', fillColor: '#ffffff', fillOpacity: 1, weight: 2, interactive: false }).addTo(measureLayerGroup);
+        measureMarkers.push(marker);
+        updateMeasureDisplay();
+    }
+    map.on('click', function(e) { if (!isMeasuring) return; addMeasurePoint(e.latlng); });
+
+    // 画面保存機能
+    const screenshoter = L.simpleMapScreenshoter({ hideElementsWithSelectors: [".leaflet-control-container", ".leaflet-dont-include-pane", "#controls", ".crosshair", ".info.legend", "#addressDisplay"], mimeType: "image/jpeg" }).addTo(map);
+    function downloadMapImageWithExif() {
+        screenshoter.takeScreen('image').then(jpegDataUrl => {
+            const link = document.createElement('a');
+            link.download = `map_${Date.now()}.jpg`;
+            link.href = jpegDataUrl;
+            link.click();
+        }).catch(e => { alert("保存に失敗しました"); });
     }
 </script>
 
