@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>森林管理 v1.0 (Vision解析版)</title>
+    <title>森林管理 v1.2 (Vision解析・実務特化版)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -28,29 +28,23 @@
         .app-title { font-weight: bold; font-size: 15px; color: #27ae60; margin-right: 5px; white-space: nowrap; }
         
         button {
-            padding: 5px 10px; font-size: 12px; background-color: #007bff; color: white;
+            padding: 5px 12px; font-size: 13px; background-color: #007bff; color: white;
             border: none; cursor: pointer; border-radius: 4px; font-weight: bold; white-space: nowrap;
         }
         button:hover { background-color: #0056b3; }
-        #btnMeasure { background-color: #17a2b8; }
-        #btnMeasure:hover { background-color: #138496; }
-        #btnUndoMeasure { background-color: #ffc107; color: #212529; display: none; }
+        .btn-green { background-color: #27ae60; }
+        .btn-green:hover { background-color: #219653; }
         
-        select, input[type="text"], input[type="number"], input[type="password"] {
-            padding: 4px; font-size: 12px; border-radius: 4px; border: 1px solid #ccc;
+        select, input[type="text"], input[type="password"] {
+            padding: 5px 8px; font-size: 13px; border-radius: 4px; border: 1px solid #ccc; font-family: inherit;
         }
         
-        .filter-group { display: flex; align-items: center; gap: 5px; background: white; padding: 3px 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; font-weight: bold; }
-        .filter-group input[type="number"] { width: 40px; text-align: right; }
-        .filter-group input[type="text"] { width: 100px; }
+        .filter-group { display: flex; align-items: center; gap: 5px; background: white; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; font-weight: bold; }
+        .filter-group input[type="text"] { width: 140px; }
         
         #addressDisplay {
-            margin-left: auto; font-size: 11px; font-weight: bold; color: #004d26;
-            background: #fff; padding: 4px 8px; border-radius: 12px; border: 1px solid #ccc; white-space: nowrap;
-        }
-        #measureResult {
-            display: none; font-weight: bold; font-size: 12px; color: #d32f2f;
-            background: white; padding: 3px 6px; border-radius: 4px; border: 1px solid #ccc; white-space: nowrap;
+            margin-left: auto; font-size: 12px; font-weight: bold; color: #004d26;
+            background: #fff; padding: 5px 10px; border-radius: 12px; border: 1px solid #ccc; white-space: nowrap;
         }
 
         #main-container { display: flex; flex-grow: 1; overflow: hidden; flex-direction: row; }
@@ -65,7 +59,7 @@
         .section-title { font-size: 14px; font-weight: bold; color: #333; margin-bottom: 8px; border-left: 4px solid #27ae60; padding-left: 8px; }
         
         #prompt-input {
-            width: 100%; height: 180px; resize: vertical; margin-bottom: 10px; 
+            width: 100%; height: 150px; resize: vertical; margin-bottom: 10px; 
             box-sizing: border-box; font-size: 12px; line-height: 1.4; background-color: #fafafa;
         }
         
@@ -83,81 +77,88 @@
         #result-area th, #result-area td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 12px; }
         #result-area th { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; }
         #result-area tr:nth-child(even) { background-color: #fcfcfc; }
-        
-        .crosshair {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 20px; height: 20px; pointer-events: none; z-index: 1001;
-        }
-        .crosshair::before, .crosshair::after { content: ''; position: absolute; background: red; box-shadow: 0 0 2px white; z-index: 1001; }
-        .crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
-        .crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
 
         .info.legend { background: rgba(255, 255, 255, 0.9); padding: 8px 12px; font-size: 11px; line-height: 18px; color: #333; border-radius: 5px; box-shadow: 0 0 15px rgba(0,0,0,0.2); display: none; cursor: pointer; max-height: 45vh; overflow-y: auto; }
         .info.legend h4 { margin: 0; font-size: 12px; color: #004d26; }
         .info.legend i { width: 14px; height: 14px; float: left; margin-right: 8px; opacity: 0.9; border: 1px solid #999; border-radius: 2px; }
+
+        @media (max-width: 768px) {
+            #main-container { flex-direction: column; }
+            #map-container { flex: 1; min-height: 400px; border-right: none; border-bottom: 1px solid #ccc; }
+            #sidebar { flex: 1; }
+        }
     </style>
 </head>
 <body>
 
 <div id="controls">
-    <span class="app-title">森林管理 v1.0</span>
+    <span class="app-title">森林管理 v1.2</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
     
     <div class="filter-group">
         <span>📍</span>
-        <input type="text" id="latLonInput" placeholder="緯度, 経度" onkeypress="handleLatLonEnter(event)">
-        <button onclick="jumpToCoordinates()">移動</button>
+        <input type="text" id="aiSearchInput" placeholder="地名検索 (例: 福井県福井市)" onkeypress="handleAiSearchEnter(event)">
+        <button onclick="searchLocationWithGemini()">検索</button>
     </div>
+    
+    <button class="btn-green" onclick="map.locate({setView: true, maxZoom: 15})">🎯 現在地</button>
 
     <!-- 絞り込みフィルター -->
-    <select id="forestTypeSelect" onchange="updateSearch()">
-        <option value="全部">林種: すべて</option>
-        <option value="人工林" selected>人工林 (限定)</option>
-    </select>
+    <div class="filter-group">
+        <select id="forestTypeSelect" onchange="updateSearch()">
+            <option value="人工林" selected>林種: 人工林 (限定)</option>
+        </select>
+    </div>
 
-    <select id="treeSpeciesSelect" onchange="updateSearch()">
-        <option value="全部">樹種: すべて</option>
-        <option value="スギ" selected>スギ</option>
-        <option value="ヒノキ">ヒノキ類</option>
-        <option value="マツ">マツ類</option>
-        <option value="カラマツ">カラマツ</option>
-        <option value="トドマツ">トドマツ</option>
-        <option value="ヒバ">ヒバ</option>
-    </select>
+    <div class="filter-group">
+        <select id="treeSpeciesSelect" onchange="updateSearch()">
+            <option value="全部">樹種: すべて</option>
+            <option value="スギ" selected>スギ</option>
+            <option value="ヒノキ">ヒノキ類</option>
+            <option value="マツ">マツ類</option>
+            <option value="カラマツ">カラマツ</option>
+            <option value="トドマツ">トドマツ</option>
+            <option value="ヒバ">ヒバ</option>
+        </select>
+    </div>
     
     <div class="filter-group">
-        <span>林齢:</span>
-        <input type="number" id="minAge" value="41" onchange="updateSearch()">
+        <span>齢級:</span>
+        <select id="minAgeClass" onchange="updateSearch()">
+            <option value="1" selected>1齢級</option>
+            <option value="2">2齢級</option>
+            <option value="3">3齢級</option>
+            <option value="4">4齢級</option>
+            <option value="5">5齢級</option>
+            <option value="6">6齢級</option>
+            <option value="7">7齢級</option>
+            <option value="8">8齢級</option>
+            <option value="9">9齢級</option>
+            <option value="10">10齢級</option>
+            <option value="11">11齢級</option>
+            <option value="12">12齢級</option>
+        </select>
         <span>〜</span>
-        <input type="number" id="maxAge" value="100" onchange="updateSearch()">
-        <span style="font-size: 11px; font-weight: normal;">年生</span>
+        <select id="maxAgeClass" onchange="updateSearch()">
+            <option value="10">10齢級</option>
+            <option value="15">15齢級</option>
+            <option value="20" selected>20齢級以上</option>
+        </select>
     </div>
-
-    <div class="filter-group" style="padding: 2px 6px;">
-        <label style="cursor: pointer; margin-right: 5px;">
-            <input type="radio" name="measureMode" value="distance" checked onchange="changeMeasureMode()"> 📏
-        </label>
-        <label style="cursor: pointer;">
-            <input type="radio" name="measureMode" value="area" onchange="changeMeasureMode()"> 📐
-        </label>
-    </div>
-
-    <button id="btnMeasure" onclick="toggleMeasure()">計測</button>
-    <button id="btnUndoMeasure" onclick="undoMeasure()">戻る</button>
-    <span id="measureResult">総距離: 0 m</span>
+    
     <div id="addressDisplay">📍 情報取得中...</div>
 </div>
 
 <div id="main-container">
     <div id="map-container">
         <div id="map"></div>
-        <div class="crosshair"></div>
     </div>
     
     <div id="sidebar">
         <div class="section-title">AI メッシュ画像解析</div>
+        
         <textarea id="prompt-input">【AIへの解析指示】
-左に表示されている地図画像（赤枠内）を解析してください。
+左に表示されている地図画像全体を解析してください。
 
 オレンジ色にハイライトされているマス目（メッシュ）は、条件に合致する「人工林の針葉樹」を示しています。
 画像内にあるオレンジ色のメッシュの数を概算でカウントし、以下の情報を表にまとめてください。
@@ -177,7 +178,7 @@
         <div id="result-area">
             <div style="color: #666; text-align: center; margin-top: 10px; font-size: 12px;">
                 👆 地図上のレイヤーから「🔍 条件絞り込みモード」をオンにして、対象のメッシュをオレンジ色に表示させてください。<br><br>
-                赤色の点線枠（1/5000・A3横）内がAIの解析対象になります。「画像解析」ボタンを押すと、Gemini（Vision）がスクショを見てメッシュ数を推計します。
+                「画像解析」ボタンを押すと、現在の表示領域全体のスクリーンショットをAI（Gemini）が視覚的に解析し、メッシュ数をカウントします。<br>※メッシュが潰れない程度にズームインしてご使用ください。
             </div>
         </div>
     </div>
@@ -186,13 +187,25 @@
 <!-- Scripts -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.min.js"></script>
-<!-- 地図を画像化するためのライブラリ -->
 <script src="https://unpkg.com/leaflet-simple-map-screenshoter"></script>
 
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         const savedKey = localStorage.getItem('gemini_api_key_forest');
         if(savedKey) { document.getElementById('geminiApiKey').value = savedKey; }
+        
+        // プルダウンの全生成 (1〜20齢級)
+        const minSelect = document.getElementById("minAgeClass");
+        const maxSelect = document.getElementById("maxAgeClass");
+        minSelect.innerHTML = ""; maxSelect.innerHTML = "";
+        for(let i=1; i<=20; i++) {
+            let label = (i === 20) ? "20齢級以上" : `${i}齢級`;
+            minSelect.innerHTML += `<option value="${i}">${label}</option>`;
+            maxSelect.innerHTML += `<option value="${i}">${label}</option>`;
+        }
+        minSelect.value = "1";
+        maxSelect.value = "20";
+        updateSearch();
     });
 
     let startLat = 36.06414; 
@@ -204,42 +217,20 @@
     L.control.scale({ imperial: false, metric: true, position: 'bottomleft' }).addTo(map);
 
     // ==========================================
-    // A3枠線 (1/5000) 
-    // ==========================================
-    const frameLayer = L.rectangle([[0,0], [0,0]], {
-        color: "#ff0000", weight: 3, fillOpacity: 0.05, interactive: false, dashArray: '5, 5'
-    }).addTo(map);
-
-    function updateFrame() {
-        const center = map.getCenter();
-        const latM = 2100 / 2;   
-        const lngM = 1485 / 2;   
-        const R = 6378137;
-        const dLat = (lngM / R) * (180 / Math.PI);
-        const dLng = (latM / (R * Math.cos(Math.PI * center.lat / 180))) * (180 / Math.PI);
-        const bounds = L.latLngBounds([center.lat - dLat, center.lng - dLng], [center.lat + dLat, center.lng + dLng]);
-        frameLayer.setBounds(bounds);
-    }
-    map.on('move', updateFrame);
-    updateFrame();
-
-    // ==========================================
     // レイヤー設定
     // ==========================================
     const opt = { attribution: '地理院タイル', crossOrigin: "anonymous", maxZoom: 18 };
     const photo = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', opt);
     const pale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', opt);
     const std = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', opt);
-    const slope = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/slopemap/{z}/{x}/{y}.png', { ...opt, opacity: 0.7 });
-    const hillshade = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/hillshademap/{z}/{x}/{y}.png', { ...opt, opacity: 0.7 });
 
     const rinpan = L.tileLayer('https://rinya-tiles.geospatial.jp/fr_layer_webp_2025/{z}/{x}/{y}.webp', { attribution: '林野庁', maxZoom: 16 });
     
     // フィルター状態
     let currentForestType = "人工林";
     let currentTreeSpecies = "スギ"; 
-    let currentMinAge = 41;
-    let currentMaxAge = 100;
+    let currentMinAgeClass = 1;
+    let currentMaxAgeClass = 20;
 
     const customSearchStyle = function(props) {
         let isTargetType = (currentForestType === "全部"); 
@@ -255,10 +246,17 @@
             if (currentTreeSpecies !== "全部" && k.includes('樹種1') && v.includes(currentTreeSpecies)) isTargetSpecies = true;
             if (k.includes('林齢')) {
                 let age = parseInt(v, 10);
-                if (!isNaN(age) && age >= currentMinAge && age <= currentMaxAge) isTargetAge = true;
+                if (!isNaN(age)) {
+                    let ageClass = Math.ceil(age / 5);
+                    if (ageClass >= 20) ageClass = 20;
+                    if (ageClass >= currentMinAgeClass && ageClass <= currentMaxAgeClass) {
+                        isTargetAge = true;
+                    }
+                }
             }
         }
         
+        // オレンジ色でハイライト
         if (isTargetType && isTargetSpecies && isTargetAge) {
             return { weight: 1.0, color: '#ff4500', fillColor: '#ff6600', fillOpacity: 0.9, fill: true, stroke: true };
         }
@@ -267,47 +265,16 @@
     
     const searchStylesProxy = new Proxy({}, { get: function(t, p) { if (p === 'constructor' || p === '__proto__') return undefined; return customSearchStyle; } });
     const searchMesh = L.vectorGrid.protobuf('https://rinya-tiles.geospatial.jp/fr_mesh20m_pbf_2025/{z}/{x}/{y}.pbf', {
-        rendererFactory: L.canvas.tile, interactive: false, minZoom: 12, maxNativeZoom: 16, vectorTileLayerStyles: searchStylesProxy 
+        rendererFactory: L.canvas.tile, interactive: false, minZoom: 13, maxNativeZoom: 16, vectorTileLayerStyles: searchStylesProxy 
     });
 
-    // 初期状態で標準地図をオフにし、淡色地図と検索メッシュをオンにする
+    // 初期状態で淡色地図と検索メッシュをオンにする
     pale.addTo(map);
     searchMesh.addTo(map);
 
-    const baseMaps = { "最新空中写真": photo, "標準地図": std, "淡色地図": pale, "陰影起伏図": hillshade, "傾斜量図": slope, "全国林班図": rinpan };
+    const baseMaps = { "最新空中写真": photo, "標準地図": std, "淡色地図": pale, "全国林班図": rinpan };
     const overlayMaps = { "🔍 条件絞り込みモード（メッシュ表示）": searchMesh };
     L.control.layers(baseMaps, overlayMaps, { collapsed: true }).addTo(map);
-
-    // 凡例表示コントロール
-    const legend = L.control({position: 'bottomleft'});
-    legend.onAdd = function (map) {
-        const div = L.DomUtil.create('div', 'info legend');
-        L.DomEvent.disableClickPropagation(div);
-        div.id = 'meshLegendControl'; 
-        div.innerHTML = `
-            <div id="legendHeader" style="display: flex; justify-content: space-between; align-items: center;">
-                <h4 style="margin: 0; font-size: 12px; color: #004d26;">🌲 樹種の色調</h4>
-                <span id="legendToggleIcon" style="font-size: 14px; font-weight: bold; color: #007bff; margin-left: 10px;">[+]</span>
-            </div>
-            <div id="legendContent" style="display: none; margin-top: 8px; border-top: 1px solid #ccc; padding-top: 8px;">
-                <i style="background: rgb(255, 75, 0)"></i> スギ<br>
-                <i style="background: rgb(77, 196, 255)"></i> ヒノキ類<br>
-                <i style="background: rgb(137, 250, 194)"></i> マツ類・エゾマツ<br>
-                <i style="background: rgb(0, 90, 255)"></i> カラマツ<br>
-                <i style="background: rgb(255, 153, 51)"></i> トドマツ<br>
-                <i style="background: rgb(3, 175, 122)"></i> 広葉樹<br>
-            </div>
-        `;
-        div.onclick = function() {
-            const content = document.getElementById('legendContent');
-            const icon = document.getElementById('legendToggleIcon');
-            if (content.style.display === 'none') { content.style.display = 'block'; icon.innerText = '[-]'; } 
-            else { content.style.display = 'none'; icon.innerText = '[+]'; }
-        };
-        return div;
-    };
-    legend.addTo(map);
-    document.getElementById('meshLegendControl').style.display = 'block';
 
     // ==========================================
     // UI 更新・移動処理
@@ -315,24 +282,70 @@
     function updateSearch() {
         currentForestType = document.getElementById("forestTypeSelect").value;
         currentTreeSpecies = document.getElementById("treeSpeciesSelect").value;
-        const minVal = document.getElementById("minAge").value;
-        currentMinAge = minVal === "" ? 0 : parseInt(minVal, 10);
-        const maxVal = document.getElementById("maxAge").value;
-        currentMaxAge = maxVal === "" ? 999 : parseInt(maxVal, 10);
+        currentMinAgeClass = parseInt(document.getElementById("minAgeClass").value, 10);
+        currentMaxAgeClass = parseInt(document.getElementById("maxAgeClass").value, 10);
+        
+        if (currentMinAgeClass > currentMaxAgeClass) {
+            alert("齢級の下限が上限を上回っています。");
+        }
         if (map.hasLayer(searchMesh)) { searchMesh.redraw(); }
     }
 
-    function jumpToCoordinates() {
-        const inputVal = document.getElementById("latLonInput").value;
-        if (!inputVal) return;
-        const parts = inputVal.replace(/,/g, ' ').trim().split(/\s+/);
-        if (parts.length >= 2) {
-            const lat = parseFloat(parts[0]);
-            const lon = parseFloat(parts[1]);
-            if (!isNaN(lat) && !isNaN(lon)) map.setView([lat, lon], 15);
+    async function getBestModel(apiKey) {
+        const modelRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        if (!modelRes.ok) throw new Error("APIキーが無効、またはモデル一覧が取得できません。");
+        const modelData = await modelRes.json();
+        const models = modelData.models || [];
+        const capableModels = models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"));
+        let bestModel = capableModels.find(m => m.name === "models/gemini-2.5-flash");
+        if (!bestModel) bestModel = capableModels.find(m => m.name === "models/gemini-1.5-flash");
+        if (!bestModel) bestModel = capableModels.find(m => m.name === "models/gemini-1.5-pro");
+        return bestModel ? bestModel.name.replace("models/", "") : "gemini-1.5-flash"; 
+    }
+
+    async function searchLocationWithGemini() {
+        const apiKey = document.getElementById('geminiApiKey').value.trim();
+        const query = document.getElementById('aiSearchInput').value.trim();
+        
+        if (!apiKey) { alert("Gemini APIキーを入力してください。"); return; }
+        if (!query) { alert("検索したい地名を入力してください。"); return; }
+
+        localStorage.setItem('gemini_api_key_forest', apiKey);
+        const originalText = document.getElementById('aiSearchInput').value;
+        document.getElementById('aiSearchInput').value = "検索中...";
+        
+        try {
+            const targetModel = await getBestModel(apiKey);
+            const prompt = `あなたは優秀な地理情報アシスタントです。以下のテキストから、日本国内で、ユーザーが見たい対象の場所を推測し、その中心座標（緯度・経度）をJSON形式で返してください。
+            テキスト: "${query}"
+            出力形式: {"lat": 緯度, "lon": 経度}
+            ※Markdown記法や余計な説明は一切含めず、純粋なJSON文字列のみを出力してください。`;
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { response_mime_type: "application/json" } 
+                })
+            });
+            
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            
+            let text = data.candidates[0].content.parts[0].text;
+            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            const coords = JSON.parse(text);
+            
+            if (coords.lat && coords.lon) { map.setView([coords.lat, coords.lon], 14); } 
+            else { throw new Error("座標データが正しく取得できませんでした"); }
+        } catch (error) {
+            console.error(error); alert("場所の特定に失敗しました。\n" + error.message);
+        } finally {
+            document.getElementById('aiSearchInput').value = originalText;
         }
     }
-    function handleLatLonEnter(e) { if (e.key === 'Enter') jumpToCoordinates(); }
+
+    function handleAiSearchEnter(e) { if (e.key === 'Enter') searchLocationWithGemini(); }
 
     function updateAddressDisplay() {
         const center = map.getCenter();
@@ -350,80 +363,11 @@
     map.on('moveend', updateAddressDisplay);
     updateAddressDisplay(); 
 
-    // 計測ロジック（割愛せず実装）
-    let isMeasuring = false;
-    let currentMeasureMode = 'distance'; 
-    let measurePoints = []; let measureMarkers = []; 
-    let measureLayerGroup = L.layerGroup().addTo(map);
-    let measurePolyline = L.polyline([], { color: '#dc3545', weight: 4, dashArray: '8,8', interactive: false });
-    let measurePolygon = L.polygon([], { color: '#28a745', weight: 4, fillOpacity: 0.3, interactive: false });
-
-    function changeMeasureMode() {
-        const radios = document.getElementsByName('measureMode');
-        for (let i=0; i<radios.length; i++) if (radios[i].checked) currentMeasureMode = radios[i].value;
-        if (isMeasuring) toggleMeasure();
-        clearAllMeasure();
-    }
-    function toggleMeasure() {
-        isMeasuring = !isMeasuring;
-        const btn = document.getElementById('btnMeasure');
-        const undo = document.getElementById('btnUndoMeasure');
-        const res = document.getElementById('measureResult');
-        if (isMeasuring) {
-            clearAllMeasure(); btn.innerText = "終了"; btn.style.backgroundColor = "#dc3545";
-            undo.style.display = "inline-block"; res.style.display = "inline-block";
-            map.getContainer().style.cursor = 'crosshair';
-        } else {
-            btn.innerText = "計測"; btn.style.backgroundColor = "#17a2b8";
-            undo.style.display = "none"; map.getContainer().style.cursor = '';
-        }
-    }
-    function clearAllMeasure() {
-        measurePoints = []; measureMarkers = []; measureLayerGroup.clearLayers();
-        if (currentMeasureMode === 'distance') measurePolyline.addTo(measureLayerGroup); else measurePolygon.addTo(measureLayerGroup);
-        document.getElementById('measureResult').innerText = currentMeasureMode === 'distance' ? "総距離: 0m" : "面積: 0ha";
-    }
-    function undoMeasure() {
-        if(measurePoints.length===0) return;
-        measurePoints.pop();
-        const lm = measureMarkers.pop(); if(lm) measureLayerGroup.removeLayer(lm);
-        if(currentMeasureMode==='distance') measurePolyline.setLatLngs(measurePoints); else measurePolygon.setLatLngs(measurePoints);
-    }
-    map.on('click', function(e) {
-        if(!isMeasuring) return;
-        measurePoints.push(e.latlng);
-        if(currentMeasureMode==='distance') measurePolyline.setLatLngs(measurePoints); else measurePolygon.setLatLngs(measurePoints);
-        const mk = L.circleMarker(e.latlng, {radius:5, color:'#dc3545', fillColor:'#fff', fillOpacity:1}).addTo(measureLayerGroup);
-        measureMarkers.push(mk);
-    });
-
-    // ==========================================
-    // ★ v1.0 追加: 最適なモデルの自動取得ロジック
-    // ==========================================
-    async function getBestModel(apiKey) {
-        const modelRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        if (!modelRes.ok) {
-            throw new Error("APIキーが無効、またはモデル一覧が取得できません。");
-        }
-        const modelData = await modelRes.json();
-        const models = modelData.models || [];
-        const capableModels = models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"));
-        
-        let bestModel = capableModels.find(m => m.name === "models/gemini-2.5-flash");
-        if (!bestModel) bestModel = capableModels.find(m => m.name === "models/gemini-1.5-flash");
-        if (!bestModel) bestModel = capableModels.find(m => m.name === "models/gemini-1.5-pro");
-        
-        if (bestModel) {
-            return bestModel.name.replace("models/", "");
-        }
-        return "gemini-1.5-flash"; // 最終フォールバック
-    }
-
     // ==========================================
     // Gemini Vision による地図画像の解析集計
     // ==========================================
     const screenshoter = L.simpleMapScreenshoter({ 
-        hideElementsWithSelectors: [".leaflet-control-container", "#controls", ".info.legend", "#addressDisplay"], 
+        hideElementsWithSelectors: [".leaflet-control-container", "#controls", "#addressDisplay"], 
         mimeType: "image/jpeg" 
     }).addTo(map);
 
@@ -441,14 +385,12 @@
         resultArea.innerHTML = `<div style="text-align:center; padding: 20px; font-weight:bold; color:#e67e22;">地図のスクリーンショットを撮影し、AI(Gemini)に送信しています...<br>※数秒かかります。</div>`;
 
         try {
-            // 1. 最適なモデル（2.5等）を自動取得
             const targetModel = await getBestModel(apiKey);
             
-            // 2. 現在の地図画面を画像(Base64)化
+            // 現在の地図画面全体を画像(Base64)化
             const imageBase64DataUrl = await screenshoter.takeScreen('image');
             const base64Image = imageBase64DataUrl.split(',')[1];
 
-            // 3. Gemini Vision (2.5等) に送信
             const payload = {
                 contents: [{
                     parts: [
@@ -472,12 +414,11 @@
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
             
-            // 4. 結果を表示
             const responseText = data.candidates[0].content.parts[0].text;
             
             resultArea.innerHTML = `
                 <div style="margin-bottom: 10px; font-size:12px; color:#666;">
-                    📸 解析に使用した画像 (枠内がA3相当):<br>
+                    📸 解析に使用した画像:<br>
                     <img src="${imageBase64DataUrl}" style="max-width:100%; border:1px solid #ccc; border-radius:4px; margin-top:5px;">
                 </div>
                 ${marked.parse(responseText)}
