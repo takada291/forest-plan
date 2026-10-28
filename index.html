@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>森林管理 v0.9 (Vision解析版)</title>
+    <title>森林管理 v1.0 (Vision解析版)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -100,7 +100,7 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">森林管理 v0.9</span>
+    <span class="app-title">森林管理 v1.0</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
     
     <div class="filter-group">
@@ -127,7 +127,7 @@
     
     <div class="filter-group">
         <span>林齢:</span>
-        <input type="number" id="minAge" value="1" onchange="updateSearch()">
+        <input type="number" id="minAge" value="41" onchange="updateSearch()">
         <span>〜</span>
         <input type="number" id="maxAge" value="100" onchange="updateSearch()">
         <span style="font-size: 11px; font-weight: normal;">年生</span>
@@ -195,8 +195,8 @@
         if(savedKey) { document.getElementById('geminiApiKey').value = savedKey; }
     });
 
-    let startLat = 36.06086; 
-    let startLon = 136.29567; // 永平寺町周辺
+    let startLat = 36.06414; 
+    let startLon = 136.28662; 
     let startZoom = 15;
 
     const map = L.map('map', { preferCanvas: true, zoomControl: false }).setView([startLat, startLon], startZoom);
@@ -238,7 +238,7 @@
     // フィルター状態
     let currentForestType = "人工林";
     let currentTreeSpecies = "スギ"; 
-    let currentMinAge = 1;
+    let currentMinAge = 41;
     let currentMaxAge = 100;
 
     const customSearchStyle = function(props) {
@@ -259,7 +259,6 @@
             }
         }
         
-        // ★ オレンジ色（#ff6600）でハイライト
         if (isTargetType && isTargetSpecies && isTargetAge) {
             return { weight: 1.0, color: '#ff4500', fillColor: '#ff6600', fillOpacity: 0.9, fill: true, stroke: true };
         }
@@ -271,8 +270,8 @@
         rendererFactory: L.canvas.tile, interactive: false, minZoom: 12, maxNativeZoom: 16, vectorTileLayerStyles: searchStylesProxy 
     });
 
-    photo.addTo(map);
-    // 初期状態で検索メッシュをオンにする
+    // 初期状態で標準地図をオフにし、淡色地図と検索メッシュをオンにする
+    pale.addTo(map);
     searchMesh.addTo(map);
 
     const baseMaps = { "最新空中写真": photo, "標準地図": std, "淡色地図": pale, "陰影起伏図": hillshade, "傾斜量図": slope, "全国林班図": rinpan };
@@ -351,7 +350,7 @@
     map.on('moveend', updateAddressDisplay);
     updateAddressDisplay(); 
 
-    // 計測機能 (省略)
+    // 計測ロジック（割愛せず実装）
     let isMeasuring = false;
     let currentMeasureMode = 'distance'; 
     let measurePoints = []; let measureMarkers = []; 
@@ -399,9 +398,30 @@
     });
 
     // ==========================================
-    // ★ Gemini Vision による地図画像の解析集計
+    // ★ v1.0 追加: 最適なモデルの自動取得ロジック
     // ==========================================
-    // スクショ撮影用の設定
+    async function getBestModel(apiKey) {
+        const modelRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        if (!modelRes.ok) {
+            throw new Error("APIキーが無効、またはモデル一覧が取得できません。");
+        }
+        const modelData = await modelRes.json();
+        const models = modelData.models || [];
+        const capableModels = models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"));
+        
+        let bestModel = capableModels.find(m => m.name === "models/gemini-2.5-flash");
+        if (!bestModel) bestModel = capableModels.find(m => m.name === "models/gemini-1.5-flash");
+        if (!bestModel) bestModel = capableModels.find(m => m.name === "models/gemini-1.5-pro");
+        
+        if (bestModel) {
+            return bestModel.name.replace("models/", "");
+        }
+        return "gemini-1.5-flash"; // 最終フォールバック
+    }
+
+    // ==========================================
+    // Gemini Vision による地図画像の解析集計
+    // ==========================================
     const screenshoter = L.simpleMapScreenshoter({ 
         hideElementsWithSelectors: [".leaflet-control-container", "#controls", ".info.legend", "#addressDisplay"], 
         mimeType: "image/jpeg" 
@@ -421,14 +441,14 @@
         resultArea.innerHTML = `<div style="text-align:center; padding: 20px; font-weight:bold; color:#e67e22;">地図のスクリーンショットを撮影し、AI(Gemini)に送信しています...<br>※数秒かかります。</div>`;
 
         try {
-            // 1. 現在の地図画面を画像(Base64)化
+            // 1. 最適なモデル（2.5等）を自動取得
+            const targetModel = await getBestModel(apiKey);
+            
+            // 2. 現在の地図画面を画像(Base64)化
             const imageBase64DataUrl = await screenshoter.takeScreen('image');
-            // Data URLから純粋なBase64文字列部分を抽出
             const base64Image = imageBase64DataUrl.split(',')[1];
 
-            // 2. Gemini 1.5 Flash (Vision対応モデル) に送信
-            const targetModel = "gemini-1.5-flash"; 
-            
+            // 3. Gemini Vision (2.5等) に送信
             const payload = {
                 contents: [{
                     parts: [
@@ -452,7 +472,7 @@
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
             
-            // 3. 結果を表示
+            // 4. 結果を表示
             const responseText = data.candidates[0].content.parts[0].text;
             
             resultArea.innerHTML = `
