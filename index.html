@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>森林管理 v1.2 (Vision解析・実務特化版)</title>
+    <title>森林管理 v1.3 (Vision解析・立木評価版)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -35,7 +35,7 @@
         .btn-green { background-color: #27ae60; }
         .btn-green:hover { background-color: #219653; }
         
-        select, input[type="text"], input[type="password"] {
+        select, input[type="text"], input[type="password"], input[type="number"] {
             padding: 5px 8px; font-size: 13px; border-radius: 4px; border: 1px solid #ccc; font-family: inherit;
         }
         
@@ -53,34 +53,41 @@
 
         #sidebar {
             flex: 3; display: flex; flex-direction: column; background: #fff; 
-            padding: 15px; box-sizing: border-box; min-width: 330px; overflow-y: auto;
+            padding: 15px; box-sizing: border-box; min-width: 360px; overflow-y: auto;
         }
         
-        .section-title { font-size: 14px; font-weight: bold; color: #333; margin-bottom: 8px; border-left: 4px solid #27ae60; padding-left: 8px; }
+        .section-title { font-size: 15px; font-weight: bold; color: #27ae60; margin-top: 15px; margin-bottom: 10px; border-bottom: 2px solid #27ae60; padding-bottom: 5px; }
+        .section-title:first-child { margin-top: 0; }
         
-        #prompt-input {
-            width: 100%; height: 150px; resize: vertical; margin-bottom: 10px; 
+        .prompt-input {
+            width: 100%; height: 130px; resize: vertical; margin-bottom: 10px; 
             box-sizing: border-box; font-size: 12px; line-height: 1.4; background-color: #fafafa;
         }
         
-        #btnVisionAnalyze { width: 100%; padding: 12px; font-size: 14px; background-color: #e67e22; margin-bottom: 10px; }
-        #btnVisionAnalyze:hover { background-color: #d35400; }
-        #btnVisionAnalyze:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        .btn-analyze { width: 100%; padding: 12px; font-size: 14px; background-color: #e67e22; margin-bottom: 10px; }
+        .btn-analyze:hover { background-color: #d35400; }
+        .btn-analyze:disabled { background-color: #bdc3c7; cursor: not-allowed; }
         
-        #result-area {
+        /* 材積推計用の青色ボタン */
+        .btn-photo-analyze { background-color: #2980b9; }
+        .btn-photo-analyze:hover { background-color: #1f618d; }
+
+        .result-area {
             flex-grow: 1; padding: 12px; background: #f8f9fa; 
             border: 1px solid #e0e0e0; border-radius: 4px; overflow-y: auto; 
-            font-size: 13px; line-height: 1.5; color: #333;
+            font-size: 13px; line-height: 1.5; color: #333; margin-bottom: 10px;
         }
         
-        #result-area table { border-collapse: collapse; width: 100%; margin-bottom: 15px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        #result-area th, #result-area td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 12px; }
-        #result-area th { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; }
-        #result-area tr:nth-child(even) { background-color: #fcfcfc; }
+        .result-area table { border-collapse: collapse; width: 100%; margin-bottom: 15px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .result-area th, .result-area td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 12px; }
+        .result-area th { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; }
+        .result-area tr:nth-child(even) { background-color: #fcfcfc; }
 
-        .info.legend { background: rgba(255, 255, 255, 0.9); padding: 8px 12px; font-size: 11px; line-height: 18px; color: #333; border-radius: 5px; box-shadow: 0 0 15px rgba(0,0,0,0.2); display: none; cursor: pointer; max-height: 45vh; overflow-y: auto; }
-        .info.legend h4 { margin: 0; font-size: 12px; color: #004d26; }
-        .info.legend i { width: 14px; height: 14px; float: left; margin-right: 8px; opacity: 0.9; border: 1px solid #999; border-radius: 2px; }
+        .photo-upload-area {
+            display: block; border: 2px dashed #bdc3c7; padding: 15px; text-align: center;
+            cursor: pointer; background: #fafafa; border-radius: 4px; margin-bottom: 10px;
+        }
+        .photo-upload-area:hover { background: #f0f8ff; border-color: #3498db; }
 
         @media (max-width: 768px) {
             #main-container { flex-direction: column; }
@@ -92,7 +99,7 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">森林管理 v1.2</span>
+    <span class="app-title">森林管理 v1.3</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
     
     <div class="filter-group">
@@ -155,30 +162,74 @@
     </div>
     
     <div id="sidebar">
-        <div class="section-title">AI メッシュ画像解析</div>
-        
-        <textarea id="prompt-input">【AIへの解析指示】
-左に表示されている地図画像全体を解析してください。
-
-オレンジ色にハイライトされているマス目（メッシュ）は、条件に合致する「人工林の針葉樹」を示しています。
-画像内にあるオレンジ色のメッシュの数を概算でカウントし、以下の情報を表にまとめてください。
+        <!-- 1. 地図解析 (面積推計) -->
+        <div class="section-title">1. 面積推計 (地図解析)</div>
+        <textarea id="map-prompt-input" class="prompt-input">【AIへの解析指示】
+左に表示されている地図画像全体を解析してください。オレンジ色のメッシュは条件に合致する「人工林の針葉樹」です。
+オレンジ色のメッシュ数を概算し、以下の情報を表にまとめてください。
 
 ■ 計算条件
-・1メッシュの面積 = 400平方メートル（0.04ha）
+・1メッシュ = 400平方メートル（0.04ha）
 
-■ 出力フォーマット（Markdown表形式）
+■ 出力フォーマット（Markdown表）
 | 項目 | 推計メッシュ数 | 推計面積(ha) |
 |---|---|---|
-| 条件合致エリア | (推測した数) | (計算結果) |
+| 条件合致エリア | (推測数) | (計算結果) |
 
-※解説や前置きは省き、表と計算根拠の簡単な説明のみを出力してください。</textarea>
-        
-        <button id="btnVisionAnalyze" onclick="analyzeMapWithVision()">📸 地図画像をAIで解析して集計</button>
-        
-        <div id="result-area">
+※解説は省き、表と計算根拠のみ出力してください。</textarea>
+        <button id="btnMapAnalyze" class="btn-analyze" onclick="analyzeMapWithVision()">🗺️ 地図をAIで解析して面積を集計</button>
+        <div id="map-result-area" class="result-area">
             <div style="color: #666; text-align: center; margin-top: 10px; font-size: 12px;">
-                👆 地図上のレイヤーから「🔍 条件絞り込みモード」をオンにして、対象のメッシュをオレンジ色に表示させてください。<br><br>
-                「画像解析」ボタンを押すと、現在の表示領域全体のスクリーンショットをAI（Gemini）が視覚的に解析し、メッシュ数をカウントします。<br>※メッシュが潰れない程度にズームインしてご使用ください。
+                👆 地図上のメッシュが潰れない程度にズームインし（レベル15以上）、ボタンを押してください。
+            </div>
+        </div>
+
+        <!-- 2. 写真解析 (材積・材質推計) -->
+        <div class="section-title">2. 材積・材質推計 (写真解析)</div>
+        <div class="filter-group" style="margin-bottom: 10px;">
+            <span>対象面積:</span>
+            <input type="number" id="targetAreaHa" step="0.1" placeholder="例: 10.5" style="width: 80px;">
+            <span>ha</span>
+            <span style="font-size: 11px; color: #666; font-weight: normal; margin-left:5px;">※上の結果等を入力</span>
+        </div>
+        
+        <label for="image-upload" class="photo-upload-area">
+            📸 クリックして現場写真を選択<br>
+            <span style="font-size:11px; color:#888;">(スギ・ヒノキ林などの林分写真)</span>
+            <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+        </label>
+        <img id="image-preview" src="" alt="プレビュー" style="display:none; max-width:100%; margin-bottom:10px; border-radius:4px;">
+        
+        <textarea id="photo-prompt-input" class="prompt-input" style="height: 180px;">【AIへの解析指示】
+添付された現場の林分写真から、以下の項目を推計しMarkdown表形式で出力してください。
+
+■ 与件
+・対象面積: {area} ha
+
+■ 出力フォーマット
+1. 【林況の目視評価】
+（木の太さ、高さ、密度、曲がり、枝下高、獣害等の観察結果）
+
+2. 【1haあたりの推計】
+| 項目 | 推計値 |
+|---|---|
+| 1haあたりの総材積 | 約 ◯◯ m3/ha |
+| A材 (優良材) の割合 | ◯ % |
+| B材 (一般材) の割合 | ◯ % |
+| C材 (低質材) の割合 | ◯ % |
+
+3. 【対象面積 ({area} ha) における総材積推計】
+※ 1haあたりの材積 × 対象面積({area}ha) で総材積を計算し、A〜C材の割合を掛けて内訳を出すこと。
+| 項目 | 推計材積 (m3) |
+|---|---|
+| 対象エリア総材積 | 約 ◯◯ m3 |
+| うち A材 | 約 ◯◯ m3 |
+| うち B材 | 約 ◯◯ m3 |
+| うち C材 | 約 ◯◯ m3 |</textarea>
+        <button id="btnPhotoAnalyze" class="btn-analyze btn-photo-analyze" onclick="analyzePhotoWithVision()">📸 写真をAIで解析して材積を計算</button>
+        <div id="photo-result-area" class="result-area">
+            <div style="color: #666; text-align: center; margin-top: 10px; font-size: 12px;">
+                👆 面積(ha)を入力し、写真をアップロードしてから解析ボタンを押してください。
             </div>
         </div>
     </div>
@@ -226,7 +277,6 @@
 
     const rinpan = L.tileLayer('https://rinya-tiles.geospatial.jp/fr_layer_webp_2025/{z}/{x}/{y}.webp', { attribution: '林野庁', maxZoom: 16 });
     
-    // フィルター状態
     let currentForestType = "人工林";
     let currentTreeSpecies = "スギ"; 
     let currentMinAgeClass = 1;
@@ -256,7 +306,6 @@
             }
         }
         
-        // オレンジ色でハイライト
         if (isTargetType && isTargetSpecies && isTargetAge) {
             return { weight: 1.0, color: '#ff4500', fillColor: '#ff6600', fillOpacity: 0.9, fill: true, stroke: true };
         }
@@ -268,7 +317,6 @@
         rendererFactory: L.canvas.tile, interactive: false, minZoom: 13, maxNativeZoom: 16, vectorTileLayerStyles: searchStylesProxy 
     });
 
-    // 初期状態で淡色地図と検索メッシュをオンにする
     pale.addTo(map);
     searchMesh.addTo(map);
 
@@ -336,7 +384,7 @@
             text = text.replace(/```json/g, '').replace(/```/g, '').trim();
             const coords = JSON.parse(text);
             
-            if (coords.lat && coords.lon) { map.setView([coords.lat, coords.lon], 14); } 
+            if (coords.lat && coords.lon) { map.setView([coords.lat, coords.lon], 15); }
             else { throw new Error("座標データが正しく取得できませんでした"); }
         } catch (error) {
             console.error(error); alert("場所の特定に失敗しました。\n" + error.message);
@@ -364,7 +412,7 @@
     updateAddressDisplay(); 
 
     // ==========================================
-    // Gemini Vision による地図画像の解析集計
+    // 1. 地図画像解析 (面積推計)
     // ==========================================
     const screenshoter = L.simpleMapScreenshoter({ 
         hideElementsWithSelectors: [".leaflet-control-container", "#controls", "#addressDisplay"], 
@@ -373,63 +421,97 @@
 
     async function analyzeMapWithVision() {
         const apiKey = document.getElementById('geminiApiKey').value.trim();
-        const userPrompt = document.getElementById('prompt-input').value.trim();
-        const resultArea = document.getElementById('result-area');
-        const btn = document.getElementById('btnVisionAnalyze');
+        const userPrompt = document.getElementById('map-prompt-input').value.trim();
+        const resultArea = document.getElementById('map-result-area');
+        const btn = document.getElementById('btnMapAnalyze');
         
         if (!apiKey) { alert("Gemini APIキーを入力してください。"); return; }
+        if (map.getZoom() < 15) { alert("ズームレベル15以上に拡大してから解析してください。"); return; }
         localStorage.setItem('gemini_api_key_forest', apiKey);
 
-        btn.innerText = "📸 地図を撮影＆解析中...";
-        btn.disabled = true;
-        resultArea.innerHTML = `<div style="text-align:center; padding: 20px; font-weight:bold; color:#e67e22;">地図のスクリーンショットを撮影し、AI(Gemini)に送信しています...<br>※数秒かかります。</div>`;
+        btn.innerText = "🗺️ 地図を撮影＆解析中..."; btn.disabled = true;
+        resultArea.innerHTML = `<div style="text-align:center; padding: 20px; font-weight:bold; color:#e67e22;">AI(Gemini)がメッシュをカウントしています...</div>`;
 
         try {
             const targetModel = await getBestModel(apiKey);
-            
-            // 現在の地図画面全体を画像(Base64)化
             const imageBase64DataUrl = await screenshoter.takeScreen('image');
             const base64Image = imageBase64DataUrl.split(',')[1];
 
-            const payload = {
-                contents: [{
-                    parts: [
-                        { text: userPrompt },
-                        {
-                            inlineData: {
-                                mimeType: "image/jpeg",
-                                data: base64Image
-                            }
-                        }
-                    ]
-                }]
-            };
-
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: "image/jpeg", data: base64Image } } ] }]
+                })
             });
             
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
-            
             const responseText = data.candidates[0].content.parts[0].text;
             
-            resultArea.innerHTML = `
-                <div style="margin-bottom: 10px; font-size:12px; color:#666;">
-                    📸 解析に使用した画像:<br>
-                    <img src="${imageBase64DataUrl}" style="max-width:100%; border:1px solid #ccc; border-radius:4px; margin-top:5px;">
-                </div>
-                ${marked.parse(responseText)}
-            `;
-            
+            resultArea.innerHTML = marked.parse(responseText);
         } catch (error) {
-            console.error(error);
-            resultArea.innerHTML = `<div style="color: #e74c3c; font-weight: bold;">画像解析に失敗しました。<br>詳細: ${error.message}</div>`;
+            resultArea.innerHTML = `<div style="color: #e74c3c; font-weight: bold;">エラー: ${error.message}</div>`;
         } finally {
-            btn.innerText = "📸 地図画像をAIで解析して集計";
-            btn.disabled = false;
+            btn.innerText = "🗺️ 地図をAIで解析して面積を集計"; btn.disabled = false;
+        }
+    }
+
+    // ==========================================
+    // 2. 現場写真解析 (材積推計)
+    // ==========================================
+    let currentPhotoBase64 = "";
+
+    function handleImageUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const dataUrl = e.target.result;
+            currentPhotoBase64 = dataUrl.split(',')[1];
+            const preview = document.getElementById('image-preview');
+            preview.src = dataUrl;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function analyzePhotoWithVision() {
+        const apiKey = document.getElementById('geminiApiKey').value.trim();
+        let promptText = document.getElementById('photo-prompt-input').value.trim();
+        const areaHa = document.getElementById('targetAreaHa').value.trim();
+        const resultArea = document.getElementById('photo-result-area');
+        const btn = document.getElementById('btnPhotoAnalyze');
+
+        if (!apiKey) { alert("APIキーを入力してください。"); return; }
+        if (!currentPhotoBase64) { alert("現場の写真をアップロードしてください。"); return; }
+        if (!areaHa || areaHa === "0") { alert("対象面積(ha)を入力してください。（上の地図解析結果を参考にしてください）"); return; }
+
+        localStorage.setItem('gemini_api_key_forest', apiKey);
+
+        // プロンプト内の {area} を入力された面積で置換
+        promptText = promptText.replace(/\{area\}/g, areaHa);
+
+        btn.innerText = "📸 写真をAIが解析中..."; btn.disabled = true;
+        resultArea.innerHTML = `<div style="text-align:center; padding: 20px; font-weight:bold; color:#2980b9;">AIが現場写真を解析し、材積と材質（A〜C材）を推計しています...</div>`;
+
+        try {
+            const targetModel = await getBestModel(apiKey);
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [ { text: promptText }, { inlineData: { mimeType: "image/jpeg", data: currentPhotoBase64 } } ] }]
+                })
+            });
+            
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            const responseText = data.candidates[0].content.parts[0].text;
+            
+            resultArea.innerHTML = marked.parse(responseText);
+        } catch (error) {
+            resultArea.innerHTML = `<div style="color: #e74c3c; font-weight: bold;">エラー: ${error.message}</div>`;
+        } finally {
+            btn.innerText = "📸 写真をAIで解析して材積を計算"; btn.disabled = false;
         }
     }
 </script>
