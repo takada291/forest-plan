@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>森林管理 v1.5</title>
+    <title>森林管理</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -53,7 +53,6 @@
             background: #fff; padding: 5px 10px; border-radius: 12px; border: 1px solid #ccc; white-space: nowrap;
         }
 
-        /* ★v1.5: 3カラムレイアウトの設定 */
         #main-container { display: flex; flex-grow: 1; overflow: hidden; flex-direction: row; }
         #map-container { flex: 50; position: relative; border-right: 1px solid #ccc; }
         #sidebar-area { flex: 25; display: flex; flex-direction: column; background: #fff; border-right: 1px solid #ccc; padding: 15px; box-sizing: border-box; overflow-y: auto; }
@@ -74,7 +73,6 @@
             font-size: 13px; line-height: 1.5; color: #333; margin-bottom: 15px;
         }
         
-        /* テーブルのスタイル */
         table { border-collapse: collapse; width: 100%; margin-bottom: 15px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         th, td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 12px; }
         th { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; }
@@ -94,11 +92,6 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
 
-        /* 凡例スタイル踏襲 */
-        .info.legend { background: rgba(255, 255, 255, 0.9); padding: 8px 12px; font-size: 11px; line-height: 18px; color: #333; border-radius: 5px; box-shadow: 0 0 15px rgba(0,0,0,0.2); display: none; cursor: pointer; max-height: 45vh; overflow-y: auto; }
-        .info.legend h4 { margin: 0; font-size: 12px; color: #004d26; }
-        .info.legend i { width: 14px; height: 14px; float: left; margin-right: 8px; opacity: 0.9; border: 1px solid #999; border-radius: 2px; }
-
         @media (max-width: 1024px) {
             #main-container { flex-direction: column; overflow-y: auto; }
             #map-container { flex: none; height: 50vh; border-right: none; border-bottom: 1px solid #ccc; }
@@ -109,7 +102,7 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">森林管理 v1.5</span>
+    <span class="app-title">森林管理 v1.6</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
     
     <div class="filter-group">
@@ -243,6 +236,48 @@
 <script src="https://unpkg.com/leaflet-simple-map-screenshoter"></script>
 
 <script>
+    // ==========================================
+    // ★v1.6: Leaflet.Draw の完全日本語化
+    // ==========================================
+    L.drawLocal = {
+        draw: {
+            toolbar: {
+                actions: { title: '描画をキャンセル', text: 'キャンセル' },
+                finish: { title: '描画を終了', text: '終了' },
+                undo: { title: '最後のポイントを削除', text: '戻る' },
+                buttons: { polygon: '多角形を描画して範囲を指定' }
+            },
+            handlers: {
+                polygon: {
+                    tooltip: {
+                        start: 'クリックして最初の点を指定',
+                        cont: 'クリックして次の点を指定',
+                        end: '最初の点をクリックして多角形を完成'
+                    }
+                }
+            }
+        },
+        edit: {
+            toolbar: {
+                actions: {
+                    save: { title: '変更を保存', text: '保存' },
+                    cancel: { title: '変更をキャンセル', text: 'キャンセル' },
+                    clearAll: { title: 'すべての図形を削除', text: 'すべてクリア' }
+                },
+                buttons: {
+                    edit: '図形を編集',
+                    editDisabled: '編集する図形がありません',
+                    remove: '図形を削除',
+                    removeDisabled: '削除する図形がありません'
+                }
+            },
+            handlers: {
+                edit: { tooltip: { text: '頂点をドラッグして編集' } },
+                remove: { tooltip: { text: '削除したい図形をクリック' } }
+            }
+        }
+    };
+
     document.addEventListener("DOMContentLoaded", () => {
         const savedKey = localStorage.getItem('gemini_api_key_forest');
         if(savedKey) { document.getElementById('geminiApiKey').value = savedKey; }
@@ -260,9 +295,10 @@
         updateSearch();
     });
 
-    let startLat = 36.06414; 
-    let startLon = 136.28662; 
-    let startZoom = 15; 
+    // ★v1.6: 初期表示を福井県庁付近に設定
+    let startLat = 36.06289; 
+    let startLon = 136.22184;
+    let startZoom = 14; 
 
     const map = L.map('map', { preferCanvas: true, zoomControl: false }).setView([startLat, startLon], startZoom);
     L.control.zoom({ position: 'topleft' }).addTo(map);
@@ -276,7 +312,6 @@
     const std = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', opt);
     const photo = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', opt);
 
-    // ★v1.5: ズーム15以上で表示に変更（MAX18から3段階）
     const rinpan = L.tileLayer('https://rinya-tiles.geospatial.jp/fr_layer_webp_2025/{z}/{x}/{y}.webp', { attribution: '林野庁', maxZoom: 16 });
     
     let currentForestType = "人工林";
@@ -317,7 +352,7 @@
     const searchStylesProxy = new Proxy({}, { get: function(t, p) { if (p === 'constructor' || p === '__proto__') return undefined; return customSearchStyle; } });
     const searchMesh = L.vectorGrid.protobuf('https://rinya-tiles.geospatial.jp/fr_mesh20m_pbf_2025/{z}/{x}/{y}.pbf', {
         rendererFactory: L.canvas.tile, interactive: false, 
-        minZoom: 15, maxNativeZoom: 16, // ★ズーム15以上で表示
+        minZoom: 15, maxNativeZoom: 16, 
         vectorTileLayerStyles: searchStylesProxy 
     });
 
@@ -325,42 +360,11 @@
     searchMesh.addTo(map);
 
     const baseMaps = { "標準地図": std, "淡色地図": pale, "最新空中写真": photo, "全国林班図": rinpan };
-    const overlayMaps = { "🔍 条件絞り込みモード（メッシュ表示）": searchMesh };
+    const overlayMaps = { "🔍 条件絞り込みモード（ズーム15以上で表示）": searchMesh };
     L.control.layers(baseMaps, overlayMaps, { collapsed: true }).addTo(map);
 
-    // 凡例
-    const legend = L.control({position: 'bottomleft'});
-    legend.onAdd = function (map) {
-        const div = L.DomUtil.create('div', 'info legend');
-        L.DomEvent.disableClickPropagation(div);
-        div.id = 'meshLegendControl'; 
-        div.innerHTML = `
-            <div id="legendHeader" style="display: flex; justify-content: space-between; align-items: center;">
-                <h4 style="margin: 0; font-size: 12px; color: #004d26;">🌲 樹種の色調</h4>
-                <span id="legendToggleIcon" style="font-size: 14px; font-weight: bold; color: #007bff; margin-left: 10px;">[+]</span>
-            </div>
-            <div id="legendContent" style="display: none; margin-top: 8px; border-top: 1px solid #ccc; padding-top: 8px;">
-                <i style="background: rgb(255, 75, 0)"></i> スギ<br>
-                <i style="background: rgb(77, 196, 255)"></i> ヒノキ類<br>
-                <i style="background: rgb(137, 250, 194)"></i> マツ類・エゾマツ<br>
-                <i style="background: rgb(0, 90, 255)"></i> カラマツ<br>
-                <i style="background: rgb(255, 153, 51)"></i> トドマツ<br>
-                <i style="background: rgb(3, 175, 122)"></i> 広葉樹<br>
-            </div>
-        `;
-        div.onclick = function() {
-            const content = document.getElementById('legendContent');
-            const icon = document.getElementById('legendToggleIcon');
-            if (content.style.display === 'none') { content.style.display = 'block'; icon.innerText = '[-]'; } 
-            else { content.style.display = 'none'; icon.innerText = '[+]'; }
-        };
-        return div;
-    };
-    legend.addTo(map);
-    document.getElementById('meshLegendControl').style.display = 'block';
-
     // ==========================================
-    // ★v1.5 多角形描画 (Leaflet.Draw) の復活
+    // 多角形描画 (Leaflet.Draw) の設定
     // ==========================================
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
@@ -368,7 +372,7 @@
     const drawControl = new L.Control.Draw({
         edit: { featureGroup: drawnItems, remove: true },
         draw: {
-            // ★描画するポリゴンのスタイルを「赤い太線・塗りつぶしなし」に設定
+            // 描画するポリゴンのスタイルを「赤い太線・塗りつぶしなし」に設定
             polygon: { 
                 allowIntersection: false, drawError: { color: '#e1e100', message: '交差不可' }, 
                 shapeOptions: { color: '#e74c3c', weight: 4, fill: false, dashArray: '5, 5' } 
