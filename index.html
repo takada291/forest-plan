@@ -110,16 +110,8 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">森林管理 v2.0</span>
+    <span class="app-title">森林管理 v2.1</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
-    
-    <select id="modelSelect" title="使用するAIモデル" style="font-size: 12px; padding: 4px;">
-        <option value="auto" selected>🤖 自動 (3.8優先)</option>
-        <option value="gemini-3.8-flash">gemini-3.8-flash (最新)</option>
-        <option value="gemini-3.6-flash">gemini-3.6-flash</option>
-        <option value="gemini-3.5-flash">gemini-3.5-flash</option>
-        <option value="gemini-2.5-flash">gemini-2.5-flash (旧キー用)</option>
-    </select>
 
     <div class="filter-group">
         <span>📍</span>
@@ -212,7 +204,10 @@
 | 対象エリア総材積 | 約 ◯◯ m3 |
 | うち A材 | 約 ◯◯ m3 |
 | うち B材 | 約 ◯◯ m3 |
-| うち C材 | 約 ◯◯ m3 |</textarea>
+| うち C材 | 約 ◯◯ m3 |
+
+4. 【今後の森林管理に向けた提言】
+（対象面積・推計材積・A〜C材の割合や林況を踏まえ、間伐や主伐の判断、獣害対策、搬出・採算性の視点など、今後の森林管理・施業方針について簡潔に提言してください）</textarea>
         
         <button id="btnPhotoAnalyze" class="btn-photo-analyze" onclick="analyzePhotoWithVision()" disabled>📸 写真と面積から材積を推計する</button>
         
@@ -228,7 +223,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-<!-- ★ 面積の正確な幾何学計算のために Turf.js を追加 -->
+<!-- 面積の正確な幾何学計算のために Turf.js を追加 -->
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
 <script>
@@ -363,7 +358,7 @@
     });
     map.addControl(drawControl);
     
-    // ★v1.10 Turf.js を使った面積計算関数
+    // Turf.js を使った面積計算関数
     function calculateAreaAndUpdate(layer) {
         try {
             const geojson = layer.toGeoJSON();
@@ -408,23 +403,8 @@
         if (map.hasLayer(searchMesh)) { searchMesh.redraw(); }
     }
 
-    async function getModelCandidates(apiKey) {
-        const selected = document.getElementById('modelSelect').value;
-        if (selected !== 'auto') { return [selected]; }
-        const defaultPriority = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"];
-        try {
-            const modelRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-            if (!modelRes.ok) return defaultPriority;
-            const modelData = await modelRes.json();
-            const availableNames = (modelData.models || [])
-                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
-                .map(m => m.name.replace("models/", ""));
-            const v3FlashModels = availableNames.filter(name => name.startsWith("gemini-3") && name.includes("flash")).sort().reverse();
-            const candidates = [...new Set([...v3FlashModels, ...defaultPriority])];
-            const validCandidates = candidates.filter(c => availableNames.includes(c));
-            return validCandidates.length > 0 ? validCandidates : defaultPriority;
-        } catch (e) { return defaultPriority; }
-    }
+    // ★v2.1: 3.8は使用せず、3.6を最優先し、旧キー等の場合は2.5へ自動で振る
+    const MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-2.5-flash"];
 
     async function fetchWithTimeout(url, options, timeoutMs = 45000) {
         const controller = new AbortController();
@@ -434,9 +414,8 @@
     }
 
     async function callGeminiWithFallback(apiKey, basePayload, onStatusUpdate) {
-        const candidates = await getModelCandidates(apiKey);
         let lastErrorMsg = "";
-        for (const modelName of candidates) {
+        for (const modelName of MODEL_CANDIDATES) {
             if (onStatusUpdate) onStatusUpdate(modelName);
             const isGemini3 = modelName.startsWith("gemini-3");
             const payloadWithThinking = JSON.parse(JSON.stringify(basePayload));
@@ -474,7 +453,7 @@
                 lastErrorMsg = `[${modelName}] ${err.name === 'AbortError' ? 'タイムアウト(45秒超過)' : err.message}`;
             }
         }
-        throw new Error(lastErrorMsg || "すべてのAIモデルで通信に失敗しました。APIキーや利用制限をご確認ください。");
+        throw new Error(lastErrorMsg || "AIモデルでの通信に失敗しました。APIキーや利用制限をご確認ください。");
     }
 
     async function searchLocationWithGemini() {
@@ -516,7 +495,7 @@
     updateAddressDisplay(); 
 
     // ==========================================
-    // 現場写真解析 (材積推計)
+    // 現場写真解析 (材積推計・森林管理提言)
     // ==========================================
     let currentPhotoBase64 = "";
 
