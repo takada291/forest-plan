@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>森林管理</title>
+    <title>森林管理 v1.7</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -102,7 +102,7 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">森林管理 v1.6</span>
+    <span class="app-title">森林管理 v1.7</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
     
     <div class="filter-group">
@@ -237,46 +237,34 @@
 
 <script>
     // ==========================================
-    // ★v1.6: Leaflet.Draw の完全日本語化
+    // ★v1.7: Leaflet.Draw 日本語化のバグ修正
+    // (L.drawLocal の必要なオブジェクト構造を維持して上書き)
     // ==========================================
-    L.drawLocal = {
-        draw: {
-            toolbar: {
-                actions: { title: '描画をキャンセル', text: 'キャンセル' },
-                finish: { title: '描画を終了', text: '終了' },
-                undo: { title: '最後のポイントを削除', text: '戻る' },
-                buttons: { polygon: '多角形を描画して範囲を指定' }
-            },
-            handlers: {
-                polygon: {
-                    tooltip: {
-                        start: 'クリックして最初の点を指定',
-                        cont: 'クリックして次の点を指定',
-                        end: '最初の点をクリックして多角形を完成'
-                    }
-                }
-            }
-        },
-        edit: {
-            toolbar: {
-                actions: {
-                    save: { title: '変更を保存', text: '保存' },
-                    cancel: { title: '変更をキャンセル', text: 'キャンセル' },
-                    clearAll: { title: 'すべての図形を削除', text: 'すべてクリア' }
-                },
-                buttons: {
-                    edit: '図形を編集',
-                    editDisabled: '編集する図形がありません',
-                    remove: '図形を削除',
-                    removeDisabled: '削除する図形がありません'
-                }
-            },
-            handlers: {
-                edit: { tooltip: { text: '頂点をドラッグして編集' } },
-                remove: { tooltip: { text: '削除したい図形をクリック' } }
-            }
-        }
-    };
+    if (typeof L.drawLocal !== 'undefined') {
+        L.drawLocal.draw.toolbar.actions.title = '描画をキャンセル';
+        L.drawLocal.draw.toolbar.actions.text = 'キャンセル';
+        L.drawLocal.draw.toolbar.finish.title = '描画を終了';
+        L.drawLocal.draw.toolbar.finish.text = '終了';
+        L.drawLocal.draw.toolbar.undo.title = '最後のポイントを削除';
+        L.drawLocal.draw.toolbar.undo.text = '戻る';
+        L.drawLocal.draw.toolbar.buttons.polygon = '多角形を描画して範囲を指定';
+        L.drawLocal.draw.handlers.polygon.tooltip.start = 'クリックして最初の点を指定';
+        L.drawLocal.draw.handlers.polygon.tooltip.cont = 'クリックして次の点を指定';
+        L.drawLocal.draw.handlers.polygon.tooltip.end = '最初の点をクリックして多角形を完成';
+
+        L.drawLocal.edit.toolbar.actions.save.title = '変更を保存';
+        L.drawLocal.edit.toolbar.actions.save.text = '保存';
+        L.drawLocal.edit.toolbar.actions.cancel.title = '変更をキャンセル';
+        L.drawLocal.edit.toolbar.actions.cancel.text = 'キャンセル';
+        L.drawLocal.edit.toolbar.actions.clearAll.title = 'すべての図形を削除';
+        L.drawLocal.edit.toolbar.actions.clearAll.text = 'すべてクリア';
+        L.drawLocal.edit.toolbar.buttons.edit = '図形を編集';
+        L.drawLocal.edit.toolbar.buttons.editDisabled = '編集する図形がありません';
+        L.drawLocal.edit.toolbar.buttons.remove = '図形を削除';
+        L.drawLocal.edit.toolbar.buttons.removeDisabled = '削除する図形がありません';
+        L.drawLocal.edit.handlers.edit.tooltip.text = '頂点をドラッグして編集';
+        L.drawLocal.edit.handlers.remove.tooltip.text = '削除したい図形をクリック';
+    }
 
     document.addEventListener("DOMContentLoaded", () => {
         const savedKey = localStorage.getItem('gemini_api_key_forest');
@@ -295,7 +283,6 @@
         updateSearch();
     });
 
-    // ★v1.6: 初期表示を福井県庁付近に設定
     let startLat = 36.06289; 
     let startLon = 136.22184;
     let startZoom = 14; 
@@ -372,7 +359,6 @@
     const drawControl = new L.Control.Draw({
         edit: { featureGroup: drawnItems, remove: true },
         draw: {
-            // 描画するポリゴンのスタイルを「赤い太線・塗りつぶしなし」に設定
             polygon: { 
                 allowIntersection: false, drawError: { color: '#e1e100', message: '交差不可' }, 
                 shapeOptions: { color: '#e74c3c', weight: 4, fill: false, dashArray: '5, 5' } 
@@ -382,11 +368,9 @@
     });
     map.addControl(drawControl);
     
-    // スタイルを固定するためのイベント処理
     map.on(L.Draw.Event.CREATED, function (e) {
-        drawnItems.clearLayers(); // 描画は1つのみ許可
+        drawnItems.clearLayers(); 
         const layer = e.layer;
-        // スタイルを再適用
         layer.setStyle({ color: '#e74c3c', weight: 4, fill: false, dashArray: '5, 5' });
         drawnItems.addLayer(layer);
     });
@@ -457,13 +441,12 @@
     // ==========================================
     // 1. 地図画像解析 (面積推計)
     // ==========================================
-    // スクリーンショットには描画したポリゴン（赤枠）も含める
     const screenshoter = L.simpleMapScreenshoter({ 
         hideElementsWithSelectors: [".leaflet-control-container", "#controls", "#addressDisplay"], 
         mimeType: "image/jpeg" 
     }).addTo(map);
 
-    let currentTotalHa = 0; // AIから抽出した面積を保持
+    let currentTotalHa = 0; 
 
     async function analyzeMapWithVision() {
         const apiKey = document.getElementById('geminiApiKey').value.trim();
@@ -474,7 +457,6 @@
         if (!apiKey) { alert("Gemini APIキーを入力してください。"); return; }
         if (map.getZoom() < 15) { alert("メッシュが正確にカウントできないため、ズームレベル15以上に拡大してから解析してください。"); return; }
         
-        // 描画されているかチェック
         if (Object.keys(drawnItems._layers).length === 0) {
             alert("左のツールバー(⬟)から、地図上に解析対象となる多角形（赤枠）を描画してください。");
             return;
@@ -509,7 +491,6 @@
                 ${marked.parse(responseText)}
             `;
 
-            // レスポンスから推計面積（数値）を強引に抽出して、右の材積入力欄にセットする
             const match = responseText.match(/(\d+(?:\.\d+)?)\s*(?:ha|hectare)/i);
             if (match && match[1]) {
                 currentTotalHa = parseFloat(match[1]);
@@ -544,7 +525,6 @@
         reader.readAsDataURL(file);
     }
     
-    // 対象面積の入力が変わった時にもボタンの状態をチェック
     document.getElementById('targetAreaHa').addEventListener('input', function(e) {
         currentTotalHa = parseFloat(e.target.value) || 0;
         checkAnalyzeButtonState();
