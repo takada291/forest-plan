@@ -35,11 +35,11 @@
         button:hover { background-color: #0056b3; }
         .btn-green { background-color: #27ae60; }
         .btn-green:hover { background-color: #219653; }
-        .btn-orange { background-color: #e67e22; padding: 10px; width: 100%; font-size: 14px; margin-top: 10px; }
-        .btn-orange:hover { background-color: #d35400; }
-        .btn-orange:disabled { background-color: #bdc3c7; cursor: not-allowed; }
-        .btn-photo-analyze { background-color: #2980b9; }
+        
+        /* 材積推計用の青色ボタン */
+        .btn-photo-analyze { background-color: #2980b9; padding: 12px; width: 100%; font-size: 14px; margin-bottom: 10px; }
         .btn-photo-analyze:hover { background-color: #1f618d; }
+        .btn-photo-analyze:disabled { background-color: #bdc3c7; cursor: not-allowed; }
         
         select, input[type="text"], input[type="password"], input[type="number"] {
             padding: 5px 8px; font-size: 13px; border-radius: 4px; border: 1px solid #ccc; font-family: inherit;
@@ -53,10 +53,11 @@
             background: #fff; padding: 5px 10px; border-radius: 12px; border: 1px solid #ccc; white-space: nowrap;
         }
 
+        /* 3カラムレイアウトの設定 */
         #main-container { display: flex; flex-grow: 1; overflow: hidden; flex-direction: row; }
-        #map-container { flex: 50; position: relative; border-right: 1px solid #ccc; }
-        #sidebar-area { flex: 25; display: flex; flex-direction: column; background: #fff; border-right: 1px solid #ccc; padding: 15px; box-sizing: border-box; overflow-y: auto; }
-        #sidebar-volume { flex: 25; display: flex; flex-direction: column; background: #fff; padding: 15px; box-sizing: border-box; overflow-y: auto; }
+        #map-container { flex: 40; position: relative; border-right: 1px solid #ccc; }
+        #photo-container { flex: 30; display: flex; flex-direction: column; background: #fff; border-right: 1px solid #ccc; padding: 15px; box-sizing: border-box; overflow-y: auto; }
+        #sidebar-volume { flex: 30; display: flex; flex-direction: column; background: #fff; padding: 15px; box-sizing: border-box; overflow-y: auto; }
 
         #map { width: 100%; height: 100%; }
 
@@ -77,33 +78,41 @@
         th, td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 12px; }
         th { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; }
         tr:nth-child(even) { background-color: #fcfcfc; }
-        h4 { margin: 15px 0 5px 0; color: #2c3e50; font-size: 13px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
 
+        /* 写真プレビュー枠を大きく */
         .photo-upload-area {
-            display: block; border: 2px dashed #bdc3c7; padding: 15px; text-align: center;
-            cursor: pointer; background: #fafafa; border-radius: 4px; margin-bottom: 10px;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            border: 2px dashed #bdc3c7; padding: 20px; text-align: center; height: 100%; min-height: 250px;
+            cursor: pointer; background: #fafafa; border-radius: 4px; margin-bottom: 10px; overflow: hidden;
         }
         .photo-upload-area:hover { background: #f0f8ff; border-color: #3498db; }
+        #image-preview { max-width: 100%; max-height: 100%; display: none; border-radius: 4px; object-fit: contain; }
+        #upload-text { margin-bottom: 10px; }
 
         .model-badge {
             display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: bold;
             color: #fff; background-color: #8e44ad; border-radius: 4px; margin-bottom: 8px;
         }
+        
+        .area-display {
+            background-color: #e8f5e9; padding: 10px; border-radius: 4px; margin-bottom: 15px;
+            border: 1px solid #c8e6c9; display: flex; justify-content: space-between; align-items: center;
+        }
+        .area-display span { font-weight: bold; color: #2e7d32; font-size: 16px; }
 
         @media (max-width: 1024px) {
             #main-container { flex-direction: column; overflow-y: auto; }
             #map-container { flex: none; height: 50vh; border-right: none; border-bottom: 1px solid #ccc; }
-            #sidebar-area, #sidebar-volume { flex: none; height: auto; border-right: none; border-bottom: 1px solid #ccc; }
+            #photo-container, #sidebar-volume { flex: none; height: auto; border-right: none; border-bottom: 1px solid #ccc; }
         }
     </style>
 </head>
 <body>
 
 <div id="controls">
-    <span class="app-title">森林管理 v1.9</span>
+    <span class="app-title">森林管理 v2.0</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
     
-    <!-- ★v1.9改良: gemini-3.8-flash を標準搭載 -->
     <select id="modelSelect" title="使用するAIモデル" style="font-size: 12px; padding: 4px;">
         <option value="auto" selected>🤖 自動 (3.8優先)</option>
         <option value="gemini-3.8-flash">gemini-3.8-flash (最新)</option>
@@ -120,7 +129,6 @@
     
     <button class="btn-green" onclick="map.locate({setView: true, maxZoom: 16})">🎯 現在地</button>
 
-    <!-- 絞り込みフィルター -->
     <div class="filter-group">
         <select id="forestTypeSelect" onchange="updateSearch()">
             <option value="人工林" selected>林種: 人工林 (限定)</option>
@@ -150,54 +158,34 @@
 </div>
 
 <div id="main-container">
-    <!-- 左側 (50%): 地図エリア -->
+    <!-- 左側 (40%): 地図エリア (幾何学面積計算) -->
     <div id="map-container">
         <div id="map"></div>
     </div>
     
-    <!-- 中央 (25%): 面積推計 (地図解析) -->
-    <div id="sidebar-area">
-        <div class="section-title">1. 面積推計 (地図解析)</div>
-        <textarea id="map-prompt-input" class="prompt-input" style="height: 160px;">【AIへの解析指示】
-左に表示されている地図画像と、描画された「赤い枠線（多角形）」の内側を解析してください。
-
-オレンジ色に光っているマス目（メッシュ）は、条件に合致する「人工林の針葉樹」を示しています。
-「赤い枠線の内側」にあるオレンジ色のメッシュの数を概算でカウントし、以下の情報を表にまとめてください。
-
-■ 計算条件
-・1メッシュ = 400平方メートル（0.04ha）
-
-■ 出力フォーマット（Markdown表）
-| 項目 | 推計メッシュ数 | 推計面積(ha) |
-|---|---|---|
-| 枠内の条件合致エリア | (推測数) | (計算結果) |
-
-※表と計算根拠の簡単な説明のみを出力してください。</textarea>
-        <button id="btnMapAnalyze" class="btn-orange" onclick="analyzeMapWithVision()">🗺️ 枠内の面積をAI解析して集計</button>
-        <div id="map-result-area" class="result-area">
-            <div style="color: #666; text-align: center; margin-top: 20px; font-size: 12px;">
-                👆 地図上のメッシュが潰れない程度にズームインしてください（ズーム15以上で表示）。<br><br>
-                左のツールバー(⬟)で地図上に多角形を描画し、ボタンを押すと、AIが<b>赤枠の内側</b>のメッシュ数をカウントします。
-            </div>
-        </div>
-    </div>
-
-    <!-- 右側 (25%): 材積・材質推計 (写真解析) -->
-    <div id="sidebar-volume">
-        <div class="section-title">2. 材積・材質推計 (写真解析)</div>
-        <div class="filter-group" style="margin-bottom: 10px;">
-            <span>対象面積:</span>
-            <input type="number" id="targetAreaHa" step="0.1" placeholder="例: 10.5" style="width: 80px;">
-            <span>ha</span>
-            <span style="font-size: 11px; color: #666; font-weight: normal; margin-left:5px;">※左の結果を入力</span>
-        </div>
+    <!-- 中央 (30%): 現場写真表示エリア -->
+    <div id="photo-container">
+        <div class="section-title">1. 現場写真のアップロード</div>
         
         <label for="image-upload" class="photo-upload-area">
-            📸 クリックして現場写真を選択<br>
-            <span style="font-size:11px; color:#888;">(スギ・ヒノキ林などの林分写真)</span>
+            <div id="upload-text">
+                📸 クリックして現場写真を選択<br>
+                <span style="font-size:11px; color:#888;">(スギ・ヒノキ林などの林分写真)</span>
+            </div>
             <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+            <img id="image-preview" src="" alt="プレビュー">
         </label>
-        <img id="image-preview" src="" alt="プレビュー" style="display:none; max-width:100%; margin-bottom:10px; border-radius:4px;">
+    </div>
+
+    <!-- 右側 (30%): 材積・材質推計 (写真解析) -->
+    <div id="sidebar-volume">
+        <div class="section-title">2. 材積・材質推計 (AI解析)</div>
+        
+        <!-- 幾何学計算された面積の表示・入力欄 -->
+        <div class="area-display">
+            <div>対象面積: <input type="number" id="targetAreaHa" step="0.01" placeholder="0.00" style="width: 70px; font-weight: bold; text-align: right;"> ha</div>
+            <div style="font-size: 11px; color: #666; font-weight: normal;">※地図から自動入力</div>
+        </div>
         
         <textarea id="photo-prompt-input" class="prompt-input" style="height: 180px;">【AIへの解析指示】
 添付された現場の林分写真から、以下の項目を推計しMarkdown表形式で出力してください。
@@ -225,10 +213,12 @@
 | うち A材 | 約 ◯◯ m3 |
 | うち B材 | 約 ◯◯ m3 |
 | うち C材 | 約 ◯◯ m3 |</textarea>
-        <button id="btnPhotoAnalyze" class="btn-orange btn-photo-analyze" onclick="analyzePhotoWithVision()" disabled>📸 写真と面積から材積を推計する</button>
+        
+        <button id="btnPhotoAnalyze" class="btn-photo-analyze" onclick="analyzePhotoWithVision()" disabled>📸 写真と面積から材積を推計する</button>
+        
         <div id="photo-result-area" class="result-area">
             <div style="color: #666; text-align: center; margin-top: 20px; font-size: 12px;">
-                👆 面積(ha)を入力し、写真をアップロードしてから解析ボタンを押してください。
+                👆 地図上で多角形を描画して面積(ha)をセットし、写真をアップロードしてから解析ボタンを押してください。
             </div>
         </div>
     </div>
@@ -238,10 +228,12 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<!-- ★ 面積の正確な幾何学計算のために Turf.js を追加 -->
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
 <script>
     // ==========================================
-    // Leaflet.Draw 日本語化 (アイコン維持仕様)
+    // Leaflet.Draw 日本語化
     // ==========================================
     if (typeof L.drawLocal !== 'undefined') {
         L.drawLocal.draw.toolbar.actions.title = '描画をキャンセル';
@@ -250,10 +242,10 @@
         L.drawLocal.draw.toolbar.finish.text = '終了';
         L.drawLocal.draw.toolbar.undo.title = '最後のポイントを削除';
         L.drawLocal.draw.toolbar.undo.text = '戻る';
-        L.drawLocal.draw.toolbar.buttons.polygon = '多角形を描画して範囲を指定';
+        L.drawLocal.draw.toolbar.buttons.polygon = '多角形を描画して面積を計算';
         L.drawLocal.draw.handlers.polygon.tooltip.start = 'クリックして最初の点を指定';
         L.drawLocal.draw.handlers.polygon.tooltip.cont = 'クリックして次の点を指定';
-        L.drawLocal.draw.handlers.polygon.tooltip.end = '最初の点をクリックして多角形を完成';
+        L.drawLocal.draw.handlers.polygon.tooltip.end = '最初の点をクリックして面積を確定';
 
         L.drawLocal.edit.toolbar.actions.save.title = '変更を保存';
         L.drawLocal.edit.toolbar.actions.save.text = '保存';
@@ -286,7 +278,6 @@
         updateSearch();
     });
 
-    // 初期表示：福井県庁 (ズーム15)
     let startLat = 36.06289; 
     let startLon = 136.22184;
     let startZoom = 15; 
@@ -354,8 +345,9 @@
     L.control.layers(baseMaps, overlayMaps, { collapsed: true }).addTo(map);
 
     // ==========================================
-    // 多角形描画 (Leaflet.Draw) の設定
+    // 多角形描画と【幾何学面積計算】
     // ==========================================
+    let currentTotalHa = 0; 
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
 
@@ -364,18 +356,44 @@
         draw: {
             polygon: { 
                 allowIntersection: false, drawError: { color: '#e1e100', message: '交差不可' }, 
-                shapeOptions: { color: '#e74c3c', weight: 4, fill: false, dashArray: '5, 5' } 
+                shapeOptions: { color: '#e74c3c', weight: 4, fill: true, fillColor: '#e74c3c', fillOpacity: 0.2, dashArray: '5, 5' } 
             },
             polyline: false, rectangle: false, circle: false, circlemarker: false, marker: false
         }
     });
     map.addControl(drawControl);
     
+    // ★v1.10 Turf.js を使った面積計算関数
+    function calculateAreaAndUpdate(layer) {
+        try {
+            const geojson = layer.toGeoJSON();
+            const areaSqMeters = turf.area(geojson);
+            currentTotalHa = parseFloat((areaSqMeters / 10000).toFixed(2));
+            document.getElementById('targetAreaHa').value = currentTotalHa;
+            checkAnalyzeButtonState();
+        } catch (e) {
+            console.error("面積計算エラー:", e);
+        }
+    }
+
     map.on(L.Draw.Event.CREATED, function (e) {
         drawnItems.clearLayers(); 
         const layer = e.layer;
-        layer.setStyle({ color: '#e74c3c', weight: 4, fill: false, dashArray: '5, 5' });
+        layer.setStyle({ color: '#e74c3c', weight: 4, fill: true, fillColor: '#e74c3c', fillOpacity: 0.2, dashArray: '5, 5' });
         drawnItems.addLayer(layer);
+        calculateAreaAndUpdate(layer);
+    });
+
+    map.on(L.Draw.Event.EDITED, function (e) {
+        drawnItems.eachLayer(function (layer) {
+            calculateAreaAndUpdate(layer);
+        });
+    });
+
+    map.on(L.Draw.Event.DELETED, function (e) {
+        currentTotalHa = 0;
+        document.getElementById('targetAreaHa').value = "";
+        checkAnalyzeButtonState();
     });
 
     // ==========================================
@@ -390,112 +408,36 @@
         if (map.hasLayer(searchMesh)) { searchMesh.redraw(); }
     }
 
-    // ==========================================
-    // ★v1.9改良: 独自高速Canvasキャプチャ (0.01秒・フリーズ防止)
-    // ==========================================
-    function captureMapCanvas() {
-        const mapEl = document.getElementById('map');
-        const mapRect = mapEl.getBoundingClientRect();
-        const width = Math.round(mapRect.width);
-        const height = Math.round(mapRect.height);
-
-        // AIへの送信負荷を減らすため、長辺最大800pxにリサイズ
-        const maxWidth = 800;
-        const scale = width > maxWidth ? (maxWidth / width) : 1;
-
-        const outCanvas = document.createElement('canvas');
-        outCanvas.width = Math.round(width * scale);
-        outCanvas.height = Math.round(height * scale);
-        const ctx = outCanvas.getContext('2d');
-        ctx.scale(scale, scale);
-
-        ctx.fillStyle = '#f4f7f6';
-        ctx.fillRect(0, 0, width, height);
-
-        // 1. 地図タイル(img)と森林資源メッシュ(canvas)を順番に合成
-        const tilePane = mapEl.querySelector('.leaflet-tile-pane');
-        if (tilePane) {
-            const layers = tilePane.querySelectorAll('.leaflet-layer');
-            layers.forEach(layerEl => {
-                const layerOpacity = parseFloat(layerEl.style.opacity || '1');
-                ctx.save();
-                ctx.globalAlpha = isNaN(layerOpacity) ? 1 : layerOpacity;
-                const tiles = layerEl.querySelectorAll('img.leaflet-tile, canvas.leaflet-tile');
-                tiles.forEach(tile => {
-                    const rect = tile.getBoundingClientRect();
-                    const x = rect.left - mapRect.left;
-                    const y = rect.top - mapRect.top;
-                    try {
-                        ctx.drawImage(tile, x, y, rect.width, rect.height);
-                    } catch (e) {
-                        console.warn('Tile skipped:', e);
-                    }
-                });
-                ctx.restore();
-            });
-        }
-
-        // 2. 描画された多角形（赤枠）を正確な座標でCanvas上に直接描画
-        drawnItems.eachLayer(layer => {
-            if (layer.getLatLngs) {
-                const latlngs = layer.getLatLngs();
-                const ring = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
-                if (ring && ring.length >= 3) {
-                    ctx.save();
-                    ctx.beginPath();
-                    ring.forEach((ll, idx) => {
-                        const pt = map.latLngToContainerPoint(ll);
-                        if (idx === 0) ctx.moveTo(pt.x, pt.y);
-                        else ctx.lineTo(pt.x, pt.y);
-                    });
-                    ctx.closePath();
-                    ctx.strokeStyle = '#e74c3c';
-                    ctx.lineWidth = 4;
-                    ctx.setLineDash([6, 6]);
-                    ctx.stroke();
-                    ctx.restore();
-                }
-            }
-        });
-
-        return outCanvas.toDataURL('image/jpeg', 0.85);
-    }
-
-    // ==========================================
-    // ★v1.9改良: gemini-3.8-flash 標準対応＆長考防止フォールバック通信
-    // ==========================================
-    function getModelCandidates() {
+    async function getModelCandidates(apiKey) {
         const selected = document.getElementById('modelSelect').value;
-        if (selected !== 'auto') {
-            return [selected];
-        }
-        // 新規キー向けの 3.8-flash を最優先し、順にフォールバック
-        return [
-            "gemini-3.8-flash",
-            "gemini-3.6-flash",
-            "gemini-3.5-flash",
-            "gemini-2.5-flash"
-        ];
+        if (selected !== 'auto') { return [selected]; }
+        const defaultPriority = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"];
+        try {
+            const modelRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+            if (!modelRes.ok) return defaultPriority;
+            const modelData = await modelRes.json();
+            const availableNames = (modelData.models || [])
+                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
+                .map(m => m.name.replace("models/", ""));
+            const v3FlashModels = availableNames.filter(name => name.startsWith("gemini-3") && name.includes("flash")).sort().reverse();
+            const candidates = [...new Set([...v3FlashModels, ...defaultPriority])];
+            const validCandidates = candidates.filter(c => availableNames.includes(c));
+            return validCandidates.length > 0 ? validCandidates : defaultPriority;
+        } catch (e) { return defaultPriority; }
     }
 
     async function fetchWithTimeout(url, options, timeoutMs = 45000) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-            return await fetch(url, { ...options, signal: controller.signal });
-        } finally {
-            clearTimeout(timer);
-        }
+        try { return await fetch(url, { ...options, signal: controller.signal }); } 
+        finally { clearTimeout(timer); }
     }
 
     async function callGeminiWithFallback(apiKey, basePayload, onStatusUpdate) {
-        const candidates = getModelCandidates();
+        const candidates = await getModelCandidates(apiKey);
         let lastErrorMsg = "";
-
         for (const modelName of candidates) {
             if (onStatusUpdate) onStatusUpdate(modelName);
-
-            // Gemini 3.x 系モデルの場合は長考（フリーズ）を防ぐため thinkingLevel: "LOW" を優先付与
             const isGemini3 = modelName.startsWith("gemini-3");
             const payloadWithThinking = JSON.parse(JSON.stringify(basePayload));
             if (isGemini3) {
@@ -504,55 +446,32 @@
                     thinkingConfig: { thinkingLevel: "LOW" }
                 };
             }
-
             try {
                 let response = await fetchWithTimeout(
                     `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payloadWithThinking)
-                    },
+                    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payloadWithThinking) },
                     45000
                 );
-
                 let data = await response.json();
-
-                // 万一 thinkingConfig が原因で 400 エラーになった場合は、thinkingConfig を外して即再送
                 if (data.error && response.status === 400 && isGemini3) {
                     response = await fetchWithTimeout(
                         `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
-                        {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(basePayload)
-                        },
+                        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(basePayload) },
                         45000
                     );
                     data = await response.json();
                 }
-
                 if (data.error) {
                     lastErrorMsg = `[${modelName}] ${data.error.message}`;
-                    console.warn(`モデル ${modelName} エラーのため次を試行:`, data.error.message);
                     continue;
                 }
-
                 if (data.candidates && data.candidates[0] && data.candidates[0].content) {
                     const parts = data.candidates[0].content.parts || [];
-                    // 推論トークン(thought: true)を除いた本文パーツを取得
                     const answerPart = parts.find(p => typeof p.text === 'string' && !p.thought) || parts.find(p => typeof p.text === 'string');
-                    if (answerPart) {
-                        return {
-                            text: answerPart.text,
-                            usedModel: modelName
-                        };
-                    }
+                    if (answerPart) { return { text: answerPart.text, usedModel: modelName }; }
                 }
             } catch (err) {
-                const errText = err.name === 'AbortError' ? 'タイムアウト(45秒超過)' : err.message;
-                lastErrorMsg = `[${modelName}] ${errText}`;
-                console.warn(`モデル ${modelName} 通信失敗:`, errText);
+                lastErrorMsg = `[${modelName}] ${err.name === 'AbortError' ? 'タイムアウト(45秒超過)' : err.message}`;
             }
         }
         throw new Error(lastErrorMsg || "すべてのAIモデルで通信に失敗しました。APIキーや利用制限をご確認ください。");
@@ -568,18 +487,13 @@
         document.getElementById('aiSearchInput').value = "検索中...";
         try {
             const prompt = `あなたは優秀な地理情報アシスタントです。以下のテキストから、日本国内でユーザーが見たい対象の場所を推測し、その中心座標（緯度・経度）をJSON形式で返してください。\nテキスト: "${query}"\n出力形式: {"lat": 緯度, "lon": 経度}\n※純粋なJSON文字列のみを出力してください。`;
-            const payload = {
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { response_mime_type: "application/json" }
-            };
-            
+            const payload = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { response_mime_type: "application/json" } };
             const result = await callGeminiWithFallback(apiKey, payload);
             let text = result.text.replace(/```json/g, '').replace(/```/g, '').trim();
             const coords = JSON.parse(text);
             if (coords.lat && coords.lon) { map.setView([coords.lat, coords.lon], 15); } 
         } catch (error) { 
-            console.error(error); 
-            alert("場所の特定に失敗しました。\n" + error.message); 
+            console.error(error); alert("場所の特定に失敗しました。\n" + error.message); 
         } finally { 
             document.getElementById('aiSearchInput').value = originalText; 
         }
@@ -602,90 +516,7 @@
     updateAddressDisplay(); 
 
     // ==========================================
-    // 1. 地図画像解析 (面積推計)
-    // ==========================================
-    let currentTotalHa = 0; 
-
-    async function analyzeMapWithVision() {
-        const apiKey = document.getElementById('geminiApiKey').value.trim();
-        const userPrompt = document.getElementById('map-prompt-input').value.trim();
-        const resultArea = document.getElementById('map-result-area');
-        const btn = document.getElementById('btnMapAnalyze');
-        
-        if (!apiKey) { alert("Gemini APIキーを入力してください。"); return; }
-        if (map.getZoom() < 15) { alert("メッシュが正確にカウントできないため、ズームレベル15以上に拡大してから解析してください。"); return; }
-        
-        if (Object.keys(drawnItems._layers).length === 0) {
-            alert("左のツールバー(⬟)から、地図上に解析対象となる多角形（赤枠）を描画してください。");
-            return;
-        }
-
-        localStorage.setItem('gemini_api_key_forest', apiKey);
-
-        btn.innerText = "🗺️ 地図を撮影＆解析中..."; btn.disabled = true;
-        
-        let sec = 0;
-        let activeModel = "準備中";
-        const updateTimerUI = () => {
-            resultArea.innerHTML = `<div style="text-align:center; padding: 20px; font-weight:bold; color:#e67e22;">
-                🤖 モデル [${activeModel}] で赤枠内のメッシュを解析中...<br>
-                <span style="font-size:12px; color:#666;">（経過時間: ${sec}秒）</span>
-            </div>`;
-        };
-        updateTimerUI();
-        const timerId = setInterval(() => { sec++; updateTimerUI(); }, 1000);
-
-        try {
-            // 独自Canvasキャプチャで即座に画像化
-            const imageBase64DataUrl = captureMapCanvas();
-            const base64Image = imageBase64DataUrl.split(',')[1];
-
-            const payload = {
-                contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: "image/jpeg", data: base64Image } } ] }]
-            };
-
-            const result = await callGeminiWithFallback(apiKey, payload, (m) => {
-                activeModel = m;
-                updateTimerUI();
-            });
-            const responseText = result.text;
-            
-            resultArea.innerHTML = `
-                <span class="model-badge">使用モデル: ${result.usedModel}</span>
-                <div style="margin-bottom: 10px; font-size:11px; color:#666;">
-                    📸 解析に使用した画像 (赤枠内をカウント):<br>
-                    <img src="${imageBase64DataUrl}" style="max-width:100%; border:1px solid #ccc; border-radius:4px; margin-top:5px;">
-                </div>
-                ${marked.parse(responseText)}
-            `;
-
-            // 表の3列目（推計面積）または「〇〇 ha」の表記から面積を抽出して右カラムへ自動セット
-            let extractedHa = null;
-            const tableMatch = responseText.match(/\|\s*枠内の条件合致エリア\s*\|\s*[^|]+\|\s*([0-9.]+)\s*(?:ha)?\s*\|/i);
-            const unitMatch = responseText.match(/(\d+(?:\.\d+)?)\s*(?:ha|ヘクタール)/i);
-            
-            if (tableMatch && tableMatch[1]) {
-                extractedHa = parseFloat(tableMatch[1]);
-            } else if (unitMatch && unitMatch[1]) {
-                extractedHa = parseFloat(unitMatch[1]);
-            }
-
-            if (extractedHa !== null && !isNaN(extractedHa)) {
-                currentTotalHa = extractedHa;
-                document.getElementById('targetAreaHa').value = currentTotalHa;
-            }
-            checkAnalyzeButtonState();
-
-        } catch (error) {
-            resultArea.innerHTML = `<div style="color: #e74c3c; font-weight: bold;">エラー: ${error.message}</div>`;
-        } finally {
-            clearInterval(timerId);
-            btn.innerText = "🗺️ 枠内の面積をAI解析して集計"; btn.disabled = false;
-        }
-    }
-
-    // ==========================================
-    // 2. 現場写真解析 (材積推計)
+    // 現場写真解析 (材積推計)
     // ==========================================
     let currentPhotoBase64 = "";
 
@@ -699,6 +530,7 @@
             const preview = document.getElementById('image-preview');
             preview.src = dataUrl;
             preview.style.display = 'block';
+            document.getElementById('upload-text').style.display = 'none'; // テキストを非表示
             checkAnalyzeButtonState();
         };
         reader.readAsDataURL(file);
