@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>森林管理 v1.7</title>
+    <title>森林管理 v1.8</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -92,6 +92,11 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
 
+        .model-badge {
+            display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: bold;
+            color: #fff; background-color: #8e44ad; border-radius: 4px; margin-bottom: 5px;
+        }
+
         @media (max-width: 1024px) {
             #main-container { flex-direction: column; overflow-y: auto; }
             #map-container { flex: none; height: 50vh; border-right: none; border-bottom: 1px solid #ccc; }
@@ -102,9 +107,18 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">森林管理 v1.7</span>
+    <span class="app-title">森林管理 v1.8</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
     
+    <!-- ★v1.8追加: モデル選択（自動フォールバック対応） -->
+    <select id="modelSelect" title="使用するAIモデル（自動選択推奨）" style="font-size: 12px; padding: 4px;">
+        <option value="auto" selected>🤖 モデル: 自動(推奨)</option>
+        <option value="gemini-3.0-flash">gemini-3.0-flash</option>
+        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+        <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+        <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+    </select>
+
     <div class="filter-group">
         <span>📍</span>
         <input type="text" id="aiSearchInput" placeholder="地名検索 (例: 福井県福井市)" onkeypress="handleAiSearchEnter(event)">
@@ -170,7 +184,7 @@
         <button id="btnMapAnalyze" class="btn-orange" onclick="analyzeMapWithVision()">🗺️ 枠内の面積をAI解析して集計</button>
         <div id="map-result-area" class="result-area">
             <div style="color: #666; text-align: center; margin-top: 20px; font-size: 12px;">
-                👆 地図上のメッシュが潰れない程度にズームインしてください。<br><br>
+                👆 地図上のメッシュが潰れない程度にズームインしてください（ズーム15以上で表示）。<br><br>
                 左のツールバー(⬟)で地図上に多角形を描画し、ボタンを押すと、AIが<b>赤枠の内側</b>のメッシュ数をカウントします。
             </div>
         </div>
@@ -231,14 +245,12 @@
 <!-- Scripts -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.min.js"></script>
-<!-- 多角形描画用 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 <script src="https://unpkg.com/leaflet-simple-map-screenshoter"></script>
 
 <script>
     // ==========================================
-    // ★v1.7: Leaflet.Draw 日本語化のバグ修正
-    // (L.drawLocal の必要なオブジェクト構造を維持して上書き)
+    // Leaflet.Draw 日本語化 (アイコン維持仕様)
     // ==========================================
     if (typeof L.drawLocal !== 'undefined') {
         L.drawLocal.draw.toolbar.actions.title = '描画をキャンセル';
@@ -283,9 +295,10 @@
         updateSearch();
     });
 
+    // 初期表示：福井県庁 (メッシュ表示条件に合わせて初期ズームを15に設定)
     let startLat = 36.06289; 
     let startLon = 136.22184;
-    let startZoom = 14; 
+    let startZoom = 15; 
 
     const map = L.map('map', { preferCanvas: true, zoomControl: false }).setView([startLat, startLon], startZoom);
     L.control.zoom({ position: 'topleft' }).addTo(map);
@@ -387,15 +400,78 @@
         if (map.hasLayer(searchMesh)) { searchMesh.redraw(); }
     }
 
-    async function getBestModel(apiKey) {
-        const modelRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        if (!modelRes.ok) throw new Error("APIキーが無効、またはモデル一覧が取得できません。");
-        const modelData = await modelRes.json();
-        const models = modelData.models || [];
-        const capableModels = models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"));
-        let bestModel = capableModels.find(m => m.name === "models/gemini-2.5-flash");
-        if (!bestModel) bestModel = capableModels.find(m => m.name === "models/gemini-1.5-flash");
-        return bestModel ? bestModel.name.replace("models/", "") : "gemini-1.5-flash"; 
+    // ==========================================
+    // ★v1.8: 次世代モデル対応＆自動フォールバック通信関数
+    // ==========================================
+    async function getModelCandidates(apiKey) {
+        const selected = document.getElementById('modelSelect').value;
+        if (selected !== 'auto') {
+            return [selected];
+        }
+
+        // デフォルトの優先順位リスト（新規ユーザー向け 3.0 を最優先し、2.5 -> 2.0 -> 1.5 の順に試行）
+        const defaultPriority = [
+            "gemini-3.0-flash",
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash"
+        ];
+
+        try {
+            const modelRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+            if (!modelRes.ok) return defaultPriority;
+            
+            const modelData = await modelRes.json();
+            const models = modelData.models || [];
+            const availableNames = models
+                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
+                .map(m => m.name.replace("models/", ""));
+
+            // API一覧に 3.x 系の flash モデルがあれば最優先で先頭に追加（3.8 や 3.5 等への将来対応）
+            const v3FlashModels = availableNames.filter(name => name.startsWith("gemini-3") && name.includes("flash")).sort().reverse();
+            
+            const candidates = [...new Set([...v3FlashModels, ...defaultPriority])];
+            // API一覧に存在するモデルを前に、念のためフォールバック用も残す
+            const validCandidates = candidates.filter(c => availableNames.includes(c));
+            return validCandidates.length > 0 ? validCandidates : defaultPriority;
+        } catch (e) {
+            return defaultPriority;
+        }
+    }
+
+    // 自動的に利用可能なモデルへ切り替えてリクエストを送るラッパー関数
+    async function callGeminiWithFallback(apiKey, payload) {
+        const candidates = await getModelCandidates(apiKey);
+        let lastErrorMsg = "";
+
+        for (const modelName of candidates) {
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    lastErrorMsg = `[${modelName}] ${data.error.message}`;
+                    console.warn(`モデル ${modelName} でエラーが発生したため次の候補を試行します:`, data.error.message);
+                    continue; // 新規ユーザー制限やクォータ制限の場合は次のモデルへ自動フォールバック
+                }
+                
+                if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                    return {
+                        text: data.candidates[0].content.parts[0].text,
+                        usedModel: modelName
+                    };
+                }
+            } catch (err) {
+                lastErrorMsg = `[${modelName}] ${err.message}`;
+                console.warn(`モデル ${modelName} の通信に失敗しました:`, err);
+            }
+        }
+        throw new Error(lastErrorMsg || "すべてのAIモデルで通信に失敗しました。APIキーや利用制限をご確認ください。");
     }
 
     async function searchLocationWithGemini() {
@@ -407,19 +483,22 @@
         const originalText = document.getElementById('aiSearchInput').value;
         document.getElementById('aiSearchInput').value = "検索中...";
         try {
-            const targetModel = await getBestModel(apiKey);
             const prompt = `あなたは優秀な地理情報アシスタントです。以下のテキストから、日本国内でユーザーが見たい対象の場所を推測し、その中心座標（緯度・経度）をJSON形式で返してください。\nテキスト: "${query}"\n出力形式: {"lat": 緯度, "lon": 経度}\n※純粋なJSON文字列のみを出力してください。`;
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { response_mime_type: "application/json" } })
-            });
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
-            let text = data.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { response_mime_type: "application/json" }
+            };
+            
+            const result = await callGeminiWithFallback(apiKey, payload);
+            let text = result.text.replace(/```json/g, '').replace(/```/g, '').trim();
             const coords = JSON.parse(text);
             if (coords.lat && coords.lon) { map.setView([coords.lat, coords.lon], 15); } 
-        } catch (error) { console.error(error); alert("場所の特定に失敗しました。\n" + error.message); } 
-        finally { document.getElementById('aiSearchInput').value = originalText; }
+        } catch (error) { 
+            console.error(error); 
+            alert("場所の特定に失敗しました。\n" + error.message); 
+        } finally { 
+            document.getElementById('aiSearchInput').value = originalText; 
+        }
     }
     function handleAiSearchEnter(e) { if (e.key === 'Enter') searchLocationWithGemini(); }
     
@@ -468,22 +547,18 @@
         resultArea.innerHTML = `<div style="text-align:center; padding: 20px; font-weight:bold; color:#e67e22;">AI(Gemini)が赤枠内のメッシュをカウントしています...<br>※数秒かかります。</div>`;
 
         try {
-            const targetModel = await getBestModel(apiKey);
             const imageBase64DataUrl = await screenshoter.takeScreen('image');
             const base64Image = imageBase64DataUrl.split(',')[1];
 
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: "image/jpeg", data: base64Image } } ] }]
-                })
-            });
-            
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
-            const responseText = data.candidates[0].content.parts[0].text;
+            const payload = {
+                contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: "image/jpeg", data: base64Image } } ] }]
+            };
+
+            const result = await callGeminiWithFallback(apiKey, payload);
+            const responseText = result.text;
             
             resultArea.innerHTML = `
+                <span class="model-badge">使用モデル: ${result.usedModel}</span>
                 <div style="margin-bottom: 10px; font-size:11px; color:#666;">
                     📸 解析に使用した画像 (赤枠内をカウント):<br>
                     <img src="${imageBase64DataUrl}" style="max-width:100%; border:1px solid #ccc; border-radius:4px; margin-top:5px;">
@@ -491,9 +566,19 @@
                 ${marked.parse(responseText)}
             `;
 
-            const match = responseText.match(/(\d+(?:\.\d+)?)\s*(?:ha|hectare)/i);
-            if (match && match[1]) {
-                currentTotalHa = parseFloat(match[1]);
+            // 表の3列目（推計面積）または「〇〇 ha」の表記から面積を抽出して右カラムへ自動セット
+            let extractedHa = null;
+            const tableMatch = responseText.match(/\|\s*枠内の条件合致エリア\s*\|\s*[^|]+\|\s*([0-9.]+)\s*(?:ha)?\s*\|/i);
+            const unitMatch = responseText.match(/(\d+(?:\.\d+)?)\s*(?:ha|ヘクタール)/i);
+            
+            if (tableMatch && tableMatch[1]) {
+                extractedHa = parseFloat(tableMatch[1]);
+            } else if (unitMatch && unitMatch[1]) {
+                extractedHa = parseFloat(unitMatch[1]);
+            }
+
+            if (extractedHa !== null && !isNaN(extractedHa)) {
+                currentTotalHa = extractedHa;
                 document.getElementById('targetAreaHa').value = currentTotalHa;
             }
             checkAnalyzeButtonState();
@@ -560,18 +645,15 @@
         resultArea.innerHTML = `<div style="text-align:center; padding: 20px; font-weight:bold; color:#2980b9;">AIが現場写真を解析し、材積と材質（A〜C材）を推計しています...</div>`;
 
         try {
-            const targetModel = await getBestModel(apiKey);
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [ { text: promptText }, { inlineData: { mimeType: "image/jpeg", data: currentPhotoBase64 } } ] }]
-                })
-            });
-            
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
-            const responseText = data.candidates[0].content.parts[0].text;
-            resultArea.innerHTML = marked.parse(responseText);
+            const payload = {
+                contents: [{ parts: [ { text: promptText }, { inlineData: { mimeType: "image/jpeg", data: currentPhotoBase64 } } ] }]
+            };
+
+            const result = await callGeminiWithFallback(apiKey, payload);
+            resultArea.innerHTML = `
+                <span class="model-badge">使用モデル: ${result.usedModel}</span>
+                ${marked.parse(result.text)}
+            `;
         } catch (error) {
             resultArea.innerHTML = `<div style="color: #e74c3c; font-weight: bold;">エラー: ${error.message}</div>`;
         } finally {
