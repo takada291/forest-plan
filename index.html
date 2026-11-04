@@ -162,7 +162,7 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">施業提案 v2.2</span>
+    <span class="app-title">施業提案 v2.3</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
 
     <div class="filter-group">
@@ -495,7 +495,7 @@
     // ==========================================
     // AI通信処理 (3.6最優先 -> 旧キー用2.5フォールバック)
     // ==========================================
-    const MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-2.5-flash"];
+    const MODEL_CANDIDATES = ["gemini-3.8-flash", "gemini-3.6-flash"];
 
     async function fetchWithTimeout(url, options, timeoutMs = 45000) {
         const controller = new AbortController();
