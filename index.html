@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- ★ QRコード生成用ライブラリ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-WXBP6CPKLP"></script>
     <script>
@@ -109,6 +111,12 @@
         }
         .area-display span { font-weight: bold; color: #2e7d32; font-size: 16px; }
 
+        /* QRコード表示枠 */
+        #qrcode-container {
+            display: flex; flex-direction: column; align-items: center; margin-bottom: 10px;
+        }
+        #qrcode { margin-top: 5px; }
+
         /* 印刷（PDF出力）用の専用レポート領域（通常時は非表示） */
         #print-report-container { display: none; }
 
@@ -131,8 +139,10 @@
                 justify-content: space-between;
                 align-items: flex-end;
             }
-            .report-title { font-size: 18pt; font-weight: bold; color: #1b5e20; margin: 0; }
-            .report-date { font-size: 9.5pt; color: #555; }
+            .report-title { font-size: 18pt; font-weight: bold; color: #1b5e20; margin: 0; display: flex; align-items: center; gap: 15px;}
+            /* 印刷時のQRコード配置用 */
+            .report-qr { width: 60px; height: 60px; } 
+            .report-date { font-size: 9.5pt; color: #555; text-align: right;}
             .report-meta-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
             .report-meta-table th, .report-meta-table td { border: 1px solid #bbb; padding: 6px 10px; font-size: 10pt; }
             .report-meta-table th { background-color: #e8f5e9 !important; color: #1b5e20; width: 18%; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -162,7 +172,7 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">施業提案 v2.4</span>
+    <span class="app-title">施業提案 v2.5</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
 
     <div class="filter-group">
@@ -219,6 +229,12 @@
             <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
             <img id="image-preview" src="" alt="プレビュー">
         </label>
+        
+        <!-- ★ QRコード表示枠 -->
+        <div id="qrcode-container" style="display: none;">
+            <div style="font-size: 11px; color: #666; font-weight: bold; margin-bottom: 2px;">林小班図・立木位置連携用QR</div>
+            <div id="qrcode"></div>
+        </div>
     </div>
 
     <!-- 右側 (30%): 材積・材質推計＆施業提案 (AI解析) -->
@@ -405,11 +421,15 @@
     L.control.layers(baseMaps, overlayMaps, { collapsed: true }).addTo(map);
 
     // ==========================================
-    // 多角形描画と【幾何学面積計算】
+    // 多角形描画と【幾何学面積計算・QRコード生成】
     // ==========================================
     let currentTotalHa = 0; 
+    let currentGeoJsonString = ""; // QRコード用のGeoJSON文字列を保持
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
+    
+    // qrcodejs インスタンス
+    let qrCodeInstance = null;
 
     const drawControl = new L.Control.Draw({
         edit: { featureGroup: drawnItems, remove: true },
@@ -429,10 +449,41 @@
             const areaSqMeters = turf.area(geojson);
             currentTotalHa = parseFloat((areaSqMeters / 10000).toFixed(2));
             document.getElementById('targetAreaHa').value = currentTotalHa;
+            
+            // ★v2.4: 中心座標を算出してGeoJSON形式でデータを準備
+            const centerPoint = turf.centerOfMass(geojson);
+            const qrData = {
+                type: "Feature",
+                geometry: centerPoint.geometry,
+                properties: {
+                    areaHa: currentTotalHa,
+                    desc: "施業提案エリア中心"
+                }
+            };
+            currentGeoJsonString = JSON.stringify(qrData);
+            
+            generateQRCode(currentGeoJsonString);
             checkAnalyzeButtonState();
         } catch (e) {
             console.error("面積計算エラー:", e);
         }
+    }
+    
+    // QRコードを生成して表示する関数
+    function generateQRCode(text) {
+        const qrContainerDiv = document.getElementById('qrcode-container');
+        const qrElement = document.getElementById('qrcode');
+        qrContainerDiv.style.display = 'flex';
+        qrElement.innerHTML = ''; // 既存のQRをクリア
+        
+        qrCodeInstance = new QRCode(qrElement, {
+            text: text,
+            width: 100,
+            height: 100,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.L // GeoJSONは文字列が長いためLレベル（誤り訂正7%）に設定
+        });
     }
 
     map.on(L.Draw.Event.CREATED, function (e) {
@@ -451,7 +502,9 @@
 
     map.on(L.Draw.Event.DELETED, function (e) {
         currentTotalHa = 0;
+        currentGeoJsonString = "";
         document.getElementById('targetAreaHa').value = "";
+        document.getElementById('qrcode-container').style.display = 'none';
         checkAnalyzeButtonState();
     });
 
@@ -467,7 +520,6 @@
         if (map.hasLayer(searchMesh)) { searchMesh.redraw(); }
     }
 
-    // 選択中の樹種・齢級ラベルをわかりやすく整形する関数
     function getSelectedConditionsText() {
         const forestType = document.getElementById("forestTypeSelect").value;
         const speciesSelect = document.getElementById("treeSpeciesSelect");
@@ -486,11 +538,7 @@
             ageClassText = `${minClass}齢級 〜 ${maxClassLabel}（約${minYear}〜${maxYearText}）`;
         }
 
-        return {
-            forestType,
-            speciesText,
-            ageClassText
-        };
+        return { forestType, speciesText, ageClassText };
     }
 
     // ==========================================
@@ -644,7 +692,6 @@
 
         localStorage.setItem('gemini_api_key_forest', apiKey);
 
-        // 地図上で選択している樹種・齢級・林種・所在地をプロンプトに自動反映
         const cond = getSelectedConditionsText();
         promptText = promptText
             .replace(/\{area\}/g, areaHa)
@@ -683,7 +730,6 @@
                 <span class="model-badge">使用モデル: ${lastUsedModel}</span>
                 ${lastAnalysisHtml}
             `;
-            // 解析完了後にPDF/Word出力ボタンを表示
             document.getElementById('export-buttons').style.display = 'flex';
         } catch (error) {
             resultArea.innerHTML = `<div style="color: #e74c3c; font-weight: bold;">エラー: ${error.message}</div>`;
@@ -712,7 +758,6 @@
         ctx.fillStyle = '#f4f7f6';
         ctx.fillRect(0, 0, width, height);
 
-        // 1. 地図タイルとメッシュCanvasを合成
         const tilePane = mapEl.querySelector('.leaflet-tile-pane');
         if (tilePane) {
             const layers = tilePane.querySelectorAll('.leaflet-layer');
@@ -731,7 +776,6 @@
             });
         }
 
-        // 2. 描画された赤枠ポリゴンを合成
         drawnItems.eachLayer(layer => {
             if (layer.getLatLngs) {
                 const latlngs = layer.getLatLngs();
@@ -784,11 +828,19 @@
         const cond = getSelectedConditionsText();
         const areaHa = document.getElementById('targetAreaHa').value.trim();
         const dateStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        
+        // ★ 生成されたQRコード画像の取得 (存在する場合のみ)
+        let qrImgHtml = "";
+        const qrCanvas = document.querySelector('#qrcode canvas');
+        if (qrCanvas) {
+            const qrDataUrl = qrCanvas.toDataURL('image/png');
+            qrImgHtml = `<img src="${qrDataUrl}" class="report-qr" alt="連携QRコード">`;
+        }
 
         const reportContainer = document.getElementById('print-report-container');
         reportContainer.innerHTML = `
             <div class="report-header">
-                <h1 class="report-title">森林施業提案書</h1>
+                <h1 class="report-title">森林施業提案書 ${qrImgHtml}</h1>
                 <div class="report-date">作成日: ${dateStr} ｜ 解析モデル: ${lastUsedModel}</div>
             </div>
             <table class="report-meta-table">
@@ -838,6 +890,14 @@
         const dateStr = now.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
         const fileDateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
 
+        // ★ Word用のQRコード取得
+        let qrImgHtml = "";
+        const qrCanvas = document.querySelector('#qrcode canvas');
+        if (qrCanvas) {
+            const qrDataUrl = qrCanvas.toDataURL('image/png');
+            qrImgHtml = `<img src="${qrDataUrl}" width="50" style="margin-left:15px; vertical-align:middle;">`;
+        }
+
         const wordHtml = `
 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
@@ -855,7 +915,7 @@
 </style>
 </head>
 <body>
-    <h1 class="doc-title">森林施業提案書</h1>
+    <h1 class="doc-title">森林施業提案書 ${qrImgHtml}</h1>
     <div class="doc-meta">作成日: ${dateStr} ｜ 解析モデル: ${lastUsedModel}</div>
 
     <table>
