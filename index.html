@@ -131,7 +131,7 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">施業提案 v2.6</span>
+    <span class="app-title">施業提案 v2.7</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
 
     <div class="filter-group">
@@ -366,7 +366,7 @@
     L.control.layers(baseMaps, overlayMaps, { collapsed: true }).addTo(map);
 
     let currentTotalHa = 0; 
-    let currentGeoJsonString = ""; 
+    let currentQRDataString = ""; 
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
     let qrCodeInstance = null;
@@ -390,29 +390,14 @@
             currentTotalHa = parseFloat((areaSqMeters / 10000).toFixed(2));
             document.getElementById('targetAreaHa').value = currentTotalHa;
             
-            // ★ 中心座標を算出して軽量なGeoJSON形式に変換
+            // ★v2.7改良: GeoJSON形式をやめ、純粋な「緯度,経度」のテキストに極限までシンプル化
             const centerPoint = turf.centerOfMass(geojson);
+            const centerLng = centerPoint.geometry.coordinates[0].toFixed(5);
+            const centerLat = centerPoint.geometry.coordinates[1].toFixed(5);
             
-            // ★ データ量を最小限に削るため、小数点以下の桁数を制限（5桁程度で実用十分）
-            const centerLng = parseFloat(centerPoint.geometry.coordinates[0].toFixed(5));
-            const centerLat = parseFloat(centerPoint.geometry.coordinates[1].toFixed(5));
-
-            // ★ QRに入れるデータ構造を極限までシンプル化（ポリゴン情報は不要、中心1点のみ）
-            const qrData = {
-                type: "Feature",
-                geometry: {
-                    type: "Point",
-                    coordinates: [centerLng, centerLat]
-                },
-                properties: {
-                    areaHa: currentTotalHa,
-                    desc: "提案エリア"
-                }
-            };
-
-            currentGeoJsonString = JSON.stringify(qrData);
+            currentQRDataString = `${centerLat},${centerLng}`;
             
-            generateQRCode(currentGeoJsonString);
+            generateQRCode(currentQRDataString);
             checkAnalyzeButtonState();
         } catch (e) {
             console.error("面積計算エラー:", e);
@@ -425,7 +410,6 @@
         qrContainerDiv.style.display = 'flex';
         qrElement.innerHTML = ''; 
         
-        // ★ データ量が減ったため、エラー訂正レベルをMに上げ、より読み取りやすくする
         qrCodeInstance = new QRCode(qrElement, {
             text: text,
             width: 120,
@@ -452,7 +436,7 @@
 
     map.on(L.Draw.Event.DELETED, function (e) {
         currentTotalHa = 0;
-        currentGeoJsonString = "";
+        currentQRDataString = "";
         document.getElementById('targetAreaHa').value = "";
         document.getElementById('qrcode-container').style.display = 'none';
         checkAnalyzeButtonState();
