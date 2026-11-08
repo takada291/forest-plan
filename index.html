@@ -36,6 +36,8 @@
         button:hover { background-color: #0056b3; }
         .btn-green { background-color: #27ae60; }
         .btn-green:hover { background-color: #219653; }
+        .btn-teal { background-color: #20c997; }
+        .btn-teal:hover { background-color: #1aa179; }
         
         .btn-photo-analyze { background-color: #2980b9; padding: 12px; width: 100%; font-size: 14px; margin-bottom: 8px; }
         .btn-photo-analyze:hover { background-color: #1f618d; }
@@ -60,11 +62,16 @@
         }
 
         #main-container { display: flex; flex-grow: 1; overflow: hidden; flex-direction: row; }
-        #map-container { flex: 40; position: relative; border-right: 1px solid #ccc; }
+        #map-container { flex: 40; position: relative; border-right: 1px solid #ccc; display: flex; flex-direction: column; }
         #photo-container { flex: 30; display: flex; flex-direction: column; background: #fff; border-right: 1px solid #ccc; padding: 15px; box-sizing: border-box; overflow-y: auto; }
         #sidebar-volume { flex: 30; display: flex; flex-direction: column; background: #fff; padding: 15px; box-sizing: border-box; overflow-y: auto; }
 
-        #map { width: 100%; height: 100%; }
+        #map { width: 100%; flex-grow: 1; }
+        
+        /* ★v2.8: KMLボタン用のコンテナ */
+        #map-tools {
+            padding: 8px; background: #f8f9fa; border-top: 1px solid #ccc; display: flex; gap: 10px; align-items: center;
+        }
 
         .section-title { font-size: 15px; font-weight: bold; color: #27ae60; margin-bottom: 10px; border-bottom: 2px solid #27ae60; padding-bottom: 5px; }
         
@@ -102,7 +109,7 @@
         @media print {
             @page { size: A4 portrait; margin: 12mm; }
             body { height: auto; overflow: visible; background: #fff; }
-            #controls, #main-container { display: none !important; }
+            #controls, #main-container, #map-tools { display: none !important; }
             #print-report-container { display: block !important; width: 100%; color: #222; font-size: 11pt; line-height: 1.5; }
             .report-header { border-bottom: 3px solid #27ae60; padding-bottom: 6px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end; }
             .report-title { font-size: 18pt; font-weight: bold; color: #1b5e20; margin: 0; display: flex; align-items: center; gap: 15px;}
@@ -131,7 +138,7 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">施業提案 v2.7</span>
+    <span class="app-title">施業提案 v2.8</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
 
     <div class="filter-group">
@@ -173,6 +180,13 @@
 <div id="main-container">
     <div id="map-container">
         <div id="map"></div>
+        <!-- ★v2.8: KML保存・読込ボタンエリア -->
+        <div id="map-tools">
+            <span style="font-size: 12px; font-weight: bold; color: #555;">枠線データ:</span>
+            <button class="btn-green" onclick="saveKML()">💾 保存 (KML)</button>
+            <button class="btn-teal" onclick="document.getElementById('kmlInput').click()">📂 読込 (KML)</button>
+            <input type="file" id="kmlInput" accept=".kml" style="display: none;" onchange="loadKML(event)">
+        </div>
     </div>
     
     <div id="photo-container">
@@ -188,7 +202,7 @@
         </label>
         
         <div id="qrcode-container" style="display: none;">
-            <div style="font-size: 11px; color: #666; font-weight: bold; margin-bottom: 2px;">林小班図連携用QR</div>
+            <div style="font-size: 11px; color: #666; font-weight: bold; margin-bottom: 2px;">林小班図・立木位置連携用QR</div>
             <div id="qrcode"></div>
         </div>
     </div>
@@ -390,10 +404,11 @@
             currentTotalHa = parseFloat((areaSqMeters / 10000).toFixed(2));
             document.getElementById('targetAreaHa').value = currentTotalHa;
             
-            // ★v2.7改良: GeoJSON形式をやめ、純粋な「緯度,経度」のテキストに極限までシンプル化
             const centerPoint = turf.centerOfMass(geojson);
-            const centerLng = centerPoint.geometry.coordinates[0].toFixed(5);
-            const centerLat = centerPoint.geometry.coordinates[1].toFixed(5);
+            
+            // ★v2.8: 小数点以下6桁に精度を統一
+            const centerLng = centerPoint.geometry.coordinates[0].toFixed(6);
+            const centerLat = centerPoint.geometry.coordinates[1].toFixed(6);
             
             currentQRDataString = `${centerLat},${centerLng}`;
             
@@ -442,6 +457,114 @@
         checkAnalyzeButtonState();
     });
 
+    // ==========================================
+    // ★v2.8追加: KML保存・読込処理
+    // ==========================================
+    function saveKML() {
+        const layers = drawnItems.getLayers();
+        if (layers.length === 0) {
+            alert("保存する多角形データがありません。");
+            return;
+        }
+
+        let kml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        kml += '<kml xmlns="http://www.opengis.net/kml/2.2">\n';
+        kml += '  <Document>\n';
+        kml += '    <name>施業提案エリア</name>\n';
+        kml += '    <description>施業提案アプリ(v2.8)から出力されたデータ</description>\n';
+        
+        layers.forEach(layer => {
+            const latlngs = layer.getLatLngs()[0];
+            kml += '    <Placemark>\n';
+            kml += '      <name>対象区域</name>\n';
+            kml += '      <Polygon>\n';
+            kml += '        <outerBoundaryIs>\n';
+            kml += '          <LinearRing>\n';
+            kml += '            <coordinates>\n';
+            latlngs.forEach(ll => {
+                kml += `              ${ll.lng},${ll.lat},0\n`;
+            });
+            // ポリゴンを閉じるための始点追加
+            kml += `              ${latlngs[0].lng},${latlngs[0].lat},0\n`;
+            kml += '            </coordinates>\n';
+            kml += '          </LinearRing>\n';
+            kml += '        </outerBoundaryIs>\n';
+            kml += '      </Polygon>\n';
+            kml += '    </Placemark>\n';
+        });
+
+        kml += '  </Document>\n';
+        kml += '</kml>';
+
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mn = String(now.getMinutes()).padStart(2, '0');
+        const filename = `施業提案エリア_${yyyy}${mm}${dd}_${hh}${mn}.kml`;
+
+        const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    function loadKML(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(e.target.result, "text/xml");
+                
+                const polygons = xmlDoc.getElementsByTagName("Polygon");
+                if (polygons.length === 0) {
+                    alert("KMLファイルからポリゴン(多角形)データを見つけることができませんでした。");
+                    return;
+                }
+                
+                const coordsText = polygons[0].getElementsByTagName("coordinates")[0].textContent;
+                const coordPairs = coordsText.trim().split(/\s+/);
+                
+                if (coordPairs.length === 0) return;
+
+                const latlngs = [];
+                for (let i = 0; i < coordPairs.length; i++) {
+                    const parts = coordPairs[i].split(',');
+                    if (parts.length >= 2) {
+                        latlngs.push([parseFloat(parts[1]), parseFloat(parts[0])]);
+                    }
+                }
+
+                drawnItems.clearLayers();
+                const polygon = L.polygon(latlngs, {
+                    color: '#e74c3c', weight: 4, fill: true, fillColor: '#e74c3c', fillOpacity: 0.2, dashArray: '5, 5'
+                }).addTo(drawnItems);
+                
+                map.fitBounds(polygon.getBounds());
+                calculateAreaAndUpdate(polygon);
+
+            } catch (error) {
+                console.error(error);
+                alert("KMLファイルの読み込み処理に失敗しました。");
+            } finally {
+                event.target.value = ''; 
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // ==========================================
+    // UI 更新処理
+    // ==========================================
     function updateSearch() {
         currentForestType = document.getElementById("forestTypeSelect").value;
         currentTreeSpecies = document.getElementById("treeSpeciesSelect").value;
