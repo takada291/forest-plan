@@ -68,7 +68,7 @@
 
         #map { width: 100%; flex-grow: 1; }
         
-        /* ★v2.8: KMLボタン用のコンテナ */
+        /* KMLボタン用のコンテナ */
         #map-tools {
             padding: 8px; background: #f8f9fa; border-top: 1px solid #ccc; display: flex; gap: 10px; align-items: center;
         }
@@ -138,8 +138,17 @@
 <body>
 
 <div id="controls">
-    <span class="app-title">施業提案 v2.8</span>
+    <span class="app-title">施業提案 v2.9</span>
     <input type="password" id="geminiApiKey" placeholder="Gemini APIキー" style="width: 110px;">
+
+    <div class="filter-group">
+        <span>🧠 思考レベル:</span>
+        <select id="thinkingLevelSelect">
+            <option value="LOW">Low (高速・省エネ)</option>
+            <option value="MEDIUM" selected>Medium (推奨バランス)</option>
+            <option value="HIGH">High (高精度・標準)</option>
+        </select>
+    </div>
 
     <div class="filter-group">
         <span>📍</span>
@@ -180,7 +189,7 @@
 <div id="main-container">
     <div id="map-container">
         <div id="map"></div>
-        <!-- ★v2.8: KML保存・読込ボタンエリア -->
+        <!-- KML保存・読込ボタンエリア -->
         <div id="map-tools">
             <span style="font-size: 12px; font-weight: bold; color: #555;">枠線データ:</span>
             <button class="btn-green" onclick="saveKML()">💾 保存 (KML)</button>
@@ -406,7 +415,7 @@
             
             const centerPoint = turf.centerOfMass(geojson);
             
-            // ★v2.8: 小数点以下6桁に精度を統一
+            // 小数点以下6桁に精度を統一
             const centerLng = centerPoint.geometry.coordinates[0].toFixed(6);
             const centerLat = centerPoint.geometry.coordinates[1].toFixed(6);
             
@@ -458,7 +467,7 @@
     });
 
     // ==========================================
-    // ★v2.8追加: KML保存・読込処理
+    // KML保存・読込処理
     // ==========================================
     function saveKML() {
         const layers = drawnItems.getLayers();
@@ -471,7 +480,7 @@
         kml += '<kml xmlns="http://www.opengis.net/kml/2.2">\n';
         kml += '  <Document>\n';
         kml += '    <name>施業提案エリア</name>\n';
-        kml += '    <description>施業提案アプリ(v2.8)から出力されたデータ</description>\n';
+        kml += '    <description>施業提案アプリ(v2.9)から出力されたデータ</description>\n';
         
         layers.forEach(layer => {
             const latlngs = layer.getLatLngs()[0];
@@ -577,7 +586,7 @@
     function getSelectedConditionsText() {
         const forestType = document.getElementById("forestTypeSelect").value;
         const speciesSelect = document.getElementById("treeSpeciesSelect");
-        const speciesText = speciesSelect. value === "全部" ? "針葉樹・広葉樹（すべて）" : speciesSelect.options[speciesSelect.selectedIndex].text;
+        const speciesText = speciesSelect.value === "全部" ? "針葉樹・広葉樹（すべて）" : speciesSelect.options[speciesSelect.selectedIndex].text;
         
         const minClass = parseInt(document.getElementById("minAgeClass").value, 10);
         const maxClass = parseInt(document.getElementById("maxAgeClass").value, 10);
@@ -595,7 +604,10 @@
         return { forestType, speciesText, ageClassText };
     }
 
-    const MODEL_CANDIDATES = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-2.5-flash"];
+    // ==========================================
+    // ★v2.9: Gemini API 呼び出し共通基盤 (Hydrogen優先・フォールバック付き)
+    // ==========================================
+    const MODEL_CANDIDATES = ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-2.5-flash"];
 
     async function fetchWithTimeout(url, options, timeoutMs = 45000) {
         const controller = new AbortController();
@@ -606,14 +618,16 @@
 
     async function callGeminiWithFallback(apiKey, basePayload, onStatusUpdate) {
         let lastErrorMsg = "";
+        const selectedThinkingLevel = document.getElementById('thinkingLevelSelect')?.value || "MEDIUM";
+
         for (const modelName of MODEL_CANDIDATES) {
-            if (onStatusUpdate) onStatusUpdate(modelName);
-            const isGemini3 = modelName.startsWith("gemini-3");
+            if (onStatusUpdate) onStatusUpdate(`${modelName} (${selectedThinkingLevel})`);
+            const supportsThinking = modelName.startsWith("gemini-4") || modelName.startsWith("gemini-3");
             const payloadWithThinking = JSON.parse(JSON.stringify(basePayload));
-            if (isGemini3) {
+            if (supportsThinking) {
                 payloadWithThinking.generationConfig = {
                     ...(payloadWithThinking.generationConfig || {}),
-                    thinkingConfig: { thinkingLevel: "LOW" }
+                    thinkingConfig: { thinkingLevel: selectedThinkingLevel }
                 };
             }
             try {
@@ -623,7 +637,7 @@
                     45000
                 );
                 let data = await response.json();
-                if (data.error && response.status === 400 && isGemini3) {
+                if (data.error && response.status === 400 && supportsThinking) {
                     response = await fetchWithTimeout(
                         `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
                         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(basePayload) },
@@ -638,7 +652,9 @@
                 if (data.candidates && data.candidates[0] && data.candidates[0].content) {
                     const parts = data.candidates[0].content.parts || [];
                     const answerPart = parts.find(p => typeof p.text === 'string' && !p.thought) || parts.find(p => typeof p.text === 'string');
-                    if (answerPart) { return { text: answerPart.text, usedModel: modelName }; }
+                    if (answerPart) {
+                        return { text: answerPart.text, usedModel: `${modelName} [思考:${selectedThinkingLevel}]` };
+                    }
                 }
             } catch (err) {
                 lastErrorMsg = `[${modelName}] ${err.name === 'AbortError' ? 'タイムアウト(45秒超過)' : err.message}`;
